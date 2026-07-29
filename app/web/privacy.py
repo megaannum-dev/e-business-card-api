@@ -69,9 +69,10 @@ def privacy_policy_page() -> HTMLResponse:
   <ul>
     <li><strong>Provide the Service:</strong> authenticate you, store your cards,
       and sync them across your signed-in sessions.</li>
-    <li><strong>Card scanning:</strong> process on-device OCR text with a third-party
-      language model (via OpenRouter) to suggest structured contact fields. Scan
-      images are stored by us and are not sent to the language-model provider.</li>
+    <li><strong>Card scanning:</strong> process on-device OCR text with third-party
+      AI models via OpenRouter to suggest structured contact fields. When image
+      enhancement is enabled, scan images are also sent through OpenRouter to
+      straighten the card and clean its outer edges before storage.</li>
     <li><strong>Sharing:</strong> when you create a share link, show your shared card
       (including contact details and scan images, if present) to anyone who opens
       that link, and allow download of a vCard / import into another user’s collection.</li>
@@ -87,8 +88,9 @@ def privacy_policy_page() -> HTMLResponse:
       account management.</li>
     <li><strong>Our database (MongoDB):</strong> stores your account-linked cards,
       OCR text, scan images, share links, and usage counters.</li>
-    <li><strong>OpenRouter:</strong> receives OCR text (not scan images) for structured
-      parsing / enhancement when you use those features.</li>
+    <li><strong>OpenRouter:</strong> receives OCR text for structured parsing and,
+      when image enhancement is enabled, scan images for edge cleanup and
+      perspective correction.</li>
     <li><strong>People you share with:</strong> anyone with an active share link can
       view the shared card details and images.</li>
     <li><strong>Legal requirements:</strong> we may disclose information if required

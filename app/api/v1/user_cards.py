@@ -31,6 +31,7 @@ from app.models.user_card import (
 )
 from app.services.scan_image_service import ScanImageService
 from app.services.user_card_service import UserCardNotFoundError, UserCardService
+from app.utils.multipart_files import optional_upload_file
 
 logger = logging.getLogger(__name__)
 
@@ -146,9 +147,9 @@ async def parse_user_card(
 )
 async def process_user_card(
     raw_ocr_text: str = Form(..., min_length=1, max_length=OCR_TEXT_MAX_LENGTH),
-    scan_image: UploadFile | None = File(None),
+    scan_image: UploadFile | str | None = File(None),
     scan_image_base64: str | None = Form(None),
-    scan_image_back: UploadFile | None = File(None),
+    scan_image_back: UploadFile | str | None = File(None),
     scan_image_back_base64: str | None = Form(None),
     design_id: str = Form("classic"),
     is_primary: bool = Form(False),
@@ -159,6 +160,8 @@ async def process_user_card(
     scan_image_content_type = "image/jpeg"
     scan_image_back_bytes: bytes | None = None
     scan_image_back_content_type = "image/jpeg"
+    scan_image = optional_upload_file(scan_image)
+    scan_image_back = optional_upload_file(scan_image_back)
 
     if scan_image_base64:
         payload = scan_image_base64.strip()

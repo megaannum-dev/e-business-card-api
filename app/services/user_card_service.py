@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import UTC, datetime
 
@@ -16,6 +17,7 @@ from app.models.user_card import (
     UserCardResponse,
     UserCardUpdate,
 )
+from app.services.image_enhancement_service import ImageEnhancementService
 from app.services.openrouter import OpenRouterService
 from app.services.scan_image_service import ScanImageService
 
@@ -32,10 +34,12 @@ class UserCardService:
         collection: AsyncIOMotorCollection,
         scan_image_service: ScanImageService | None = None,
         openrouter_service: OpenRouterService | None = None,
+        image_enhancement_service: ImageEnhancementService | None = None,
     ) -> None:
         self._collection = collection
         self._scan_images = scan_image_service
         self._openrouter = openrouter_service or OpenRouterService()
+        self._image_enhancer = image_enhancement_service or ImageEnhancementService()
 
     async def list_for_user(self, owner_user_id: str) -> list[UserCardResponse]:
         try:
@@ -103,6 +107,24 @@ class UserCardService:
             raise CardPersistenceError("Scan image storage is not configured")
 
         card_id = response.id
+        front_task = self._image_enhancer.enhance_or_original(
+            scan_image_bytes,
+            scan_image_content_type,
+        )
+        if scan_image_back_bytes:
+            (
+                (scan_image_bytes, scan_image_content_type),
+                (scan_image_back_bytes, scan_image_back_content_type),
+            ) = await asyncio.gather(
+                front_task,
+                self._image_enhancer.enhance_or_original(
+                    scan_image_back_bytes,
+                    scan_image_back_content_type,
+                ),
+            )
+        else:
+            scan_image_bytes, scan_image_content_type = await front_task
+
         scan_image_front_id = await self._scan_images.save(
             owner_user_id=owner_user_id,
             card_id=card_id,
