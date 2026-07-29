@@ -26,11 +26,18 @@ class Settings(BaseSettings):
     share_public_base_url: str = "https://focms.megaannum.ai:8001/c"
 
     openrouter_api_key: str = ""
+    # Optional separate key for OpenRouter image models (e.g. US account for openai/*).
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_model: str = "google/gemini-2.5-flash"
     openrouter_timeout_seconds: float = 30.0
     openrouter_max_retries: int = 2
     openrouter_max_tokens: int = 2048
+
+    openrouter_api_key_us: str = ""
+    openrouter_image_model: str = "openai/gpt-image-1-mini"
+    openrouter_image_timeout_seconds: float = 120
+    openrouter_image_quality: str = "high"
+    openrouter_image_enhancement_enabled: bool = True
 
     ocr_text_max_length: int = 1500
     ocr_text_max_lines: int = 35

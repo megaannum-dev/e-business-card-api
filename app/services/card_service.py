@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 from datetime import UTC, datetime
@@ -18,6 +19,7 @@ from app.core.exceptions import (
 from app.models.card import CapturedCardBase, CapturedCardDocument, CapturedCardResponse, PhotoFace, WalletDisplay
 
 from app.models.requests import CapturedCardUpdate
+from app.services.image_enhancement_service import ImageEnhancementService
 from app.services.openrouter import OpenRouterService
 from app.services.scan_image_service import ScanImageService
 
@@ -32,10 +34,12 @@ class CardService:
         collection: AsyncIOMotorCollection,
         scan_image_service: ScanImageService | None = None,
         openrouter_service: OpenRouterService | None = None,
+        image_enhancement_service: ImageEnhancementService | None = None,
     ) -> None:
         self._collection = collection
         self._scan_images = scan_image_service
         self._openrouter = openrouter_service or OpenRouterService()
+        self._image_enhancer = image_enhancement_service or ImageEnhancementService()
 
     async def process_and_save(
         self,
@@ -80,6 +84,17 @@ class CardService:
         if scan_image_bytes:
             if self._scan_images is None:
                 raise CardPersistenceError("Scan image storage is not configured")
+            (
+                (scan_image_bytes, scan_image_content_type),
+                enhanced_back,
+            ) = await self._enhance_scan_pair(
+                scan_image_bytes,
+                scan_image_content_type,
+                scan_image_back_bytes,
+                scan_image_back_content_type,
+            )
+            if enhanced_back is not None:
+                scan_image_back_bytes, scan_image_back_content_type = enhanced_back
             scan_image_front_id = await self._scan_images.save(
                 owner_user_id=owner_user_id,
                 card_id=card_id,
@@ -458,6 +473,29 @@ class CardService:
             data=image_bytes,
             content_type=content_type,
         )
+
+    async def _enhance_scan_pair(
+        self,
+        front_bytes: bytes,
+        front_content_type: str,
+        back_bytes: bytes | None,
+        back_content_type: str,
+    ) -> tuple[tuple[bytes, str], tuple[bytes, str] | None]:
+        front_task = self._image_enhancer.enhance_or_original(
+            front_bytes,
+            front_content_type,
+        )
+        if back_bytes is None:
+            return await front_task, None
+
+        front, back = await asyncio.gather(
+            front_task,
+            self._image_enhancer.enhance_or_original(
+                back_bytes,
+                back_content_type,
+            ),
+        )
+        return front, back
 
     async def list_for_user(self, owner_user_id: str) -> list[CapturedCardResponse]:
         try:

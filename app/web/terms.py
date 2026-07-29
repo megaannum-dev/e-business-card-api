@@ -68,8 +68,8 @@ def terms_of_service_page() -> HTMLResponse:
   card details, scan images, OCR text, and custom fields (“Your Content”).</p>
   <p>You grant us a limited licence to host, process, display, and transmit Your
   Content solely to operate and improve the Service (for example storing cards,
-  generating share pages, and sending OCR text to our language-model provider
-  for parsing when you use those features).</p>
+  generating share pages, and sending OCR text or scan images to our AI provider
+  for parsing or image enhancement when you use those features).</p>
   <p>You are solely responsible for Your Content and for having the rights to
   submit it. Do not upload or share content that you are not authorised to use,
   or that is unlawful, misleading, or infringes others’ rights.</p>
@@ -86,7 +86,9 @@ def terms_of_service_page() -> HTMLResponse:
   <h2>6. Automated parsing (OCR / AI)</h2>
   <p>When you use scan or enhance features, OCR text from your device may be sent
   to a third-party language-model service (via OpenRouter) to suggest structured
-  contact fields. Scan images are stored by us and are not sent to that provider.</p>
+  contact fields. When image enhancement is enabled, scan images are also sent
+  through OpenRouter for perspective correction and outer-edge cleanup before
+  the resulting image is stored.</p>
   <p>Suggestions may be incomplete or incorrect. You should review and edit
   results before relying on them. We do not guarantee the accuracy of automated
   parsing.</p>
