@@ -102,6 +102,17 @@ class ImageEnhancementServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, (b"original", "image/png"))
 
+    async def test_status_reports_successful_enhancement(self) -> None:
+        service = ImageEnhancementService(self._settings())
+        service.enhance = AsyncMock(return_value=(b"enhanced", "image/png"))
+
+        result = await service.enhance_or_original_with_status(
+            b"original",
+            "image/jpeg",
+        )
+
+        self.assertEqual(result, (b"enhanced", "image/png", True))
+
 
 if __name__ == "__main__":
     unittest.main()

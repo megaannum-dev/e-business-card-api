@@ -251,11 +251,17 @@ class CardService:
                 parsed=parsed,
                 edited_fields=set(document.get("edited_fields", [])),
             )
+            image_updates, replaced_image_ids = await self._enhance_stored_scan_images(
+                document=document,
+                owner_user_id=owner_user_id,
+                card_id=card_id,
+            )
             next_status = "pending_review" if suggestions else "applied"
             update_fields: dict = {
                 "enhanced_suggestions": suggestions,
                 "enhancement_status": next_status,
                 "parse_error": None,
+                **image_updates,
             }
             if not suggestions:
                 core_fields, custom_fields = CardService._merge_llm_parse_respecting_edits(
@@ -274,6 +280,16 @@ class CardService:
                 {"_id": document["_id"]},
                 {"$set": update_fields},
             )
+            if self._scan_images is not None:
+                for old_image_id in replaced_image_ids:
+                    try:
+                        await self._scan_images.delete(old_image_id)
+                    except CardPersistenceError:
+                        logger.warning(
+                            "Failed to delete replaced scan image %s for card %s",
+                            old_image_id,
+                            card_id,
+                        )
         except (OpenRouterError, OpenRouterTimeoutError) as exc:
             await self._collection.update_one(
                 {"_id": document["_id"]},
@@ -496,6 +512,71 @@ class CardService:
             ),
         )
         return front, back
+
+    async def _enhance_stored_scan_images(
+        self,
+        *,
+        document: dict,
+        owner_user_id: str,
+        card_id: str,
+    ) -> tuple[dict[str, str], set[str]]:
+        if self._scan_images is None:
+            return {}, set()
+
+        front_image_id = CardService._scan_front_image_id(document)
+        back_image_id = CardService._scan_back_image_id(document)
+
+        async def enhance_face(
+            image_id: str | None,
+            face: PhotoFace,
+        ) -> tuple[PhotoFace, str, str] | None:
+            if not image_id:
+                return None
+            try:
+                image_bytes, content_type = await self._scan_images.read(image_id)
+                enhanced_bytes, enhanced_content_type, was_enhanced = (
+                    await self._image_enhancer.enhance_or_original_with_status(
+                        image_bytes,
+                        content_type,
+                    )
+                )
+                if not was_enhanced:
+                    return None
+                new_image_id = await self._scan_images.save(
+                    owner_user_id=owner_user_id,
+                    card_id=card_id,
+                    data=enhanced_bytes,
+                    content_type=enhanced_content_type,
+                )
+                return face, new_image_id, image_id
+            except CardPersistenceError as exc:
+                logger.warning(
+                    "Failed to enhance stored %s scan for card %s: %s",
+                    face,
+                    card_id,
+                    exc,
+                )
+                return None
+
+        results = await asyncio.gather(
+            enhance_face(front_image_id, "front"),
+            enhance_face(back_image_id, "back"),
+        )
+
+        updates: dict[str, str] = {}
+        replaced_ids: set[str] = set()
+        for result in results:
+            if result is None:
+                continue
+            face, new_image_id, old_image_id = result
+            replaced_ids.add(old_image_id)
+            if face == "front":
+                updates["scan_image_id"] = new_image_id
+                updates["scan_image_front_id"] = new_image_id
+            else:
+                updates["scan_image_back_id"] = new_image_id
+
+        return updates, replaced_ids
 
     async def list_for_user(self, owner_user_id: str) -> list[CapturedCardResponse]:
         try:

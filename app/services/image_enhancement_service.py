@@ -133,13 +133,28 @@ class ImageEnhancementService:
         image_bytes: bytes,
         content_type: str,
     ) -> tuple[bytes, str]:
+        enhanced_bytes, enhanced_content_type, _ = await self.enhance_or_original_with_status(
+            image_bytes,
+            content_type,
+        )
+        return enhanced_bytes, enhanced_content_type
+
+    async def enhance_or_original_with_status(
+        self,
+        image_bytes: bytes,
+        content_type: str,
+    ) -> tuple[bytes, str, bool]:
         if not self._settings.openrouter_image_enhancement_enabled:
-            return image_bytes, content_type
+            return image_bytes, content_type, False
 
         try:
-            return await self.enhance(image_bytes, content_type)
+            enhanced_bytes, enhanced_content_type = await self.enhance(
+                image_bytes,
+                content_type,
+            )
+            return enhanced_bytes, enhanced_content_type, True
         except OpenRouterError as exc:
             # Image cleanup is cosmetic. A provider outage must not prevent the
             # card and its original scan from being saved.
             logger.warning("Image enhancement failed; storing original scan: %s", exc)
-            return image_bytes, content_type
+            return image_bytes, content_type, False
