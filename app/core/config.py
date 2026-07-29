@@ -34,8 +34,8 @@ class Settings(BaseSettings):
     openrouter_max_tokens: int = 2048
 
     openrouter_api_key_us: str = ""
-    openrouter_image_model: str = "openai/gpt-image-1-mini"
-    openrouter_image_timeout_seconds: float = 120
+    openrouter_image_model: str = "google/gemini-2.5-flash-image"
+    openrouter_image_timeout_seconds: float = 30
     openrouter_image_quality: str = "high"
     openrouter_image_enhancement_enabled: bool = True
 
@@ -44,8 +44,8 @@ class Settings(BaseSettings):
     llm_max_custom_fields: int = 30
     llm_max_field_value_length: int = 500
 
-    llm_rate_limit_per_hour: int = 50
-    llm_rate_limit_per_day: int = 100
+    llm_rate_limit_per_hour: int = 10
+    llm_rate_limit_per_day: int = 20
 
     firebase_credentials_path: str = ""
 
