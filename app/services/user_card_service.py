@@ -392,7 +392,7 @@ class UserCardService:
     def _scan_image_url(card_id: str, scan_image_id: str | None) -> str | None:
         if not scan_image_id:
             return None
-        return f"/api/v1/user-cards/{card_id}/scan-image"
+        return f"/api/v1/user-cards/{card_id}/scan-image?v={scan_image_id}"
 
     @staticmethod
     def _scan_front_image_id(document: dict) -> str | None:
@@ -406,13 +406,13 @@ class UserCardService:
     def _scan_front_image_url(card_id: str, scan_image_front_id: str | None) -> str | None:
         if not scan_image_front_id:
             return None
-        return f"/api/v1/user-cards/{card_id}/scan-image/front"
+        return f"/api/v1/user-cards/{card_id}/scan-image/front?v={scan_image_front_id}"
 
     @staticmethod
     def _scan_back_image_url(card_id: str, scan_image_back_id: str | None) -> str | None:
         if not scan_image_back_id:
             return None
-        return f"/api/v1/user-cards/{card_id}/scan-image/back"
+        return f"/api/v1/user-cards/{card_id}/scan-image/back?v={scan_image_back_id}"
 
     @staticmethod
     def _resolve_wallet_display(document: dict, scan_image_id: str | None) -> WalletDisplay:

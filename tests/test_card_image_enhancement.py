@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import AsyncMock
 
 from app.services.card_service import CardService
+from app.services.user_card_service import UserCardService
 
 
 class StoredCardImageEnhancementTests(unittest.IsolatedAsyncioTestCase):
@@ -75,6 +76,16 @@ class StoredCardImageEnhancementTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(updates, {})
         self.assertEqual(replaced_ids, set())
         scan_images.save.assert_not_awaited()
+
+    def test_scan_urls_change_when_stored_image_is_replaced(self) -> None:
+        self.assertEqual(
+            CardService._scan_front_image_url("card-1", "file-2"),
+            "/api/v1/cards/card-1/scan-image/front?v=file-2",
+        )
+        self.assertEqual(
+            UserCardService._scan_front_image_url("card-1", "file-2"),
+            "/api/v1/user-cards/card-1/scan-image/front?v=file-2",
+        )
 
 
 if __name__ == "__main__":
