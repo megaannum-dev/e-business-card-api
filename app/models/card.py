@@ -8,6 +8,7 @@ PhotoFace = Literal["front", "back"]
 ParseStatus = Literal["pending", "parsed", "failed", "fallback"]
 ParseSource = Literal["llm", "offline", "manual"]
 EnhancementStatus = Literal["none", "queued", "processing", "pending_review", "applied", "failed"]
+ScanImageEnhancementStatus = Literal["none", "processing", "preview_ready", "applied", "discarded", "failed"]
 
 
 class CoreFields(BaseModel):
@@ -57,6 +58,12 @@ class CapturedCardDocument(CapturedCardBase):
     scan_image_id: str | None = None
     scan_image_front_id: str | None = None
     scan_image_back_id: str | None = None
+    scan_image_front_original_id: str | None = None
+    scan_image_back_original_id: str | None = None
+    scan_image_front_pending_id: str | None = None
+    scan_image_back_pending_id: str | None = None
+    scan_image_enhancement_status: ScanImageEnhancementStatus = "none"
+    scan_image_enhancement_error: str | None = None
     wallet_display: WalletDisplay | None = None
     photo_face: PhotoFace | None = None
     parse_status: ParseStatus = "parsed"
@@ -84,6 +91,16 @@ class CapturedCardResponse(CapturedCardBase):
         default=None,
         description="API path to download the back scan image (requires Authorization header)",
     )
+    scan_image_front_pending_url: str | None = Field(
+        default=None,
+        description="API path to preview the AI-cleaned front scan.",
+    )
+    scan_image_back_pending_url: str | None = Field(
+        default=None,
+        description="API path to preview the AI-cleaned back scan.",
+    )
+    scan_image_enhancement_status: ScanImageEnhancementStatus = "none"
+    scan_image_enhancement_error: str | None = None
     wallet_display: WalletDisplay = Field(
         description="Wallet face: photo scan or classic palette (defaults to photo when a scan exists)",
     )

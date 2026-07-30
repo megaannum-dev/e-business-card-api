@@ -34,10 +34,13 @@ class Settings(BaseSettings):
     openrouter_max_tokens: int = 2048
 
     openrouter_api_key_us: str = ""
-    openrouter_image_model: str = "google/gemini-2.5-flash-image"
+    openrouter_image_model: str = "google/gemini-3.1-flash-image"
+    openrouter_image_provider: str = "google-vertex/global"
     openrouter_image_timeout_seconds: float = 30
     openrouter_image_quality: str = "high"
     openrouter_image_enhancement_enabled: bool = True
+    # Total image-generation attempts before falling back to the original scan.
+    openrouter_image_max_attempts: int = 3
 
     ocr_text_max_length: int = 1500
     ocr_text_max_lines: int = 35

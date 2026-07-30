@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from datetime import UTC, datetime
 
@@ -20,6 +19,7 @@ from app.models.user_card import (
 from app.services.image_enhancement_service import ImageEnhancementService
 from app.services.openrouter import OpenRouterService
 from app.services.scan_image_service import ScanImageService
+from app.services.scan_image_review_service import ScanImageReviewService
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,11 @@ class UserCardService:
         self._scan_images = scan_image_service
         self._openrouter = openrouter_service or OpenRouterService()
         self._image_enhancer = image_enhancement_service or ImageEnhancementService()
+        self._scan_review = (
+            ScanImageReviewService(scan_image_service, self._image_enhancer)
+            if scan_image_service is not None
+            else None
+        )
 
     async def list_for_user(self, owner_user_id: str) -> list[UserCardResponse]:
         try:
@@ -90,6 +95,7 @@ class UserCardService:
         scan_image_back_content_type: str = "image/jpeg",
         design_id: str = "classic",
         is_primary: bool = False,
+        enhance_scan_image: bool = True,
     ) -> UserCardResponse:
         parsed = await self._openrouter.parse_ocr_text(raw_ocr_text)
         payload = UserCardCreate(
@@ -107,24 +113,6 @@ class UserCardService:
             raise CardPersistenceError("Scan image storage is not configured")
 
         card_id = response.id
-        front_task = self._image_enhancer.enhance_or_original(
-            scan_image_bytes,
-            scan_image_content_type,
-        )
-        if scan_image_back_bytes:
-            (
-                (scan_image_bytes, scan_image_content_type),
-                (scan_image_back_bytes, scan_image_back_content_type),
-            ) = await asyncio.gather(
-                front_task,
-                self._image_enhancer.enhance_or_original(
-                    scan_image_back_bytes,
-                    scan_image_back_content_type,
-                ),
-            )
-        else:
-            scan_image_bytes, scan_image_content_type = await front_task
-
         scan_image_front_id = await self._scan_images.save(
             owner_user_id=owner_user_id,
             card_id=card_id,
@@ -150,6 +138,12 @@ class UserCardService:
                         "scan_image_id": scan_image_id,
                         "scan_image_front_id": scan_image_front_id,
                         "scan_image_back_id": scan_image_back_id,
+                        "scan_image_front_original_id": scan_image_front_id,
+                        "scan_image_back_original_id": scan_image_back_id,
+                        "scan_image_enhancement_status": (
+                            "processing" if enhance_scan_image else "none"
+                        ),
+                        "scan_image_enhancement_error": None,
                         "wallet_display": wallet_display,
                         "photo_face": photo_face,
                     }
@@ -159,6 +153,8 @@ class UserCardService:
             logger.exception("Failed to link scan image to user card %s", card_id)
             raise CardPersistenceError("Failed to persist user card.") from exc
 
+        if enhance_scan_image:
+            return await self.retry_scan_image_enhancement(card_id, owner_user_id)
         document = await self._get_owned_document(owner_user_id, ObjectId(card_id))
         return self._to_response(document)
 
@@ -221,6 +217,131 @@ class UserCardService:
         except CardPersistenceError as exc:
             raise ScanImageNotFoundError("Scan image not found") from exc
 
+    async def get_pending_scan_image(
+        self,
+        card_id: str,
+        owner_user_id: str,
+        face: PhotoFace = "front",
+    ) -> tuple[bytes, str]:
+        document = await self._get_owned_document(owner_user_id, self._parse_object_id(card_id))
+        pending_id = document.get(f"scan_image_{face}_pending_id")
+        if not pending_id or self._scan_images is None:
+            raise ScanImageNotFoundError("AI scan preview not found")
+        try:
+            return await self._scan_images.read(pending_id)
+        except CardPersistenceError as exc:
+            raise ScanImageNotFoundError("AI scan preview not found") from exc
+
+    async def retry_scan_image_enhancement(
+        self,
+        card_id: str,
+        owner_user_id: str,
+    ) -> UserCardResponse:
+        document = await self._get_owned_document(owner_user_id, self._parse_object_id(card_id))
+        if self._scan_review is None:
+            raise CardPersistenceError("Scan image storage is not configured")
+        try:
+            await self._collection.update_one(
+                {"_id": document["_id"]},
+                {
+                    "$set": {
+                        "scan_image_enhancement_status": "processing",
+                        "scan_image_enhancement_error": None,
+                    }
+                },
+            )
+            result = await self._scan_review.generate_preview(
+                document=document,
+                owner_user_id=owner_user_id,
+                card_id=card_id,
+            )
+            await self._collection.update_one(
+                {"_id": document["_id"]},
+                {"$set": result.updates},
+            )
+            await self._scan_review.delete_files(result.replaced_pending_ids)
+        except PyMongoError as exc:
+            raise CardPersistenceError("Failed to persist AI scan preview") from exc
+        updated = await self._get_owned_document(owner_user_id, document["_id"])
+        return self._to_response(updated)
+
+    async def confirm_scan_image_enhancement(
+        self,
+        card_id: str,
+        owner_user_id: str,
+    ) -> UserCardResponse:
+        document = await self._get_owned_document(owner_user_id, self._parse_object_id(card_id))
+        front_pending = document.get("scan_image_front_pending_id")
+        back_pending = document.get("scan_image_back_pending_id")
+        if not front_pending and not back_pending:
+            raise CardPersistenceError("No AI scan preview is available")
+
+        updates: dict = {
+            "scan_image_front_pending_id": None,
+            "scan_image_back_pending_id": None,
+            "scan_image_enhancement_status": "applied",
+            "scan_image_enhancement_error": None,
+            "updated_at": datetime.now(UTC),
+        }
+        replaced_ids: list[str] = []
+        if front_pending:
+            old_front = UserCardService._scan_front_image_id(document)
+            updates["scan_image_id"] = front_pending
+            updates["scan_image_front_id"] = front_pending
+            if old_front and old_front != document.get("scan_image_front_original_id"):
+                replaced_ids.append(old_front)
+        if back_pending:
+            old_back = UserCardService._scan_back_image_id(document)
+            updates["scan_image_back_id"] = back_pending
+            if old_back and old_back != document.get("scan_image_back_original_id"):
+                replaced_ids.append(old_back)
+
+        try:
+            await self._collection.update_one(
+                {"_id": document["_id"]},
+                {"$set": updates},
+            )
+        except PyMongoError as exc:
+            raise CardPersistenceError("Failed to confirm AI scan preview") from exc
+        if self._scan_review is not None:
+            await self._scan_review.delete_files(replaced_ids)
+        updated = await self._get_owned_document(owner_user_id, document["_id"])
+        return self._to_response(updated)
+
+    async def discard_scan_image_enhancement(
+        self,
+        card_id: str,
+        owner_user_id: str,
+    ) -> UserCardResponse:
+        document = await self._get_owned_document(owner_user_id, self._parse_object_id(card_id))
+        pending_ids = [
+            image_id
+            for image_id in (
+                document.get("scan_image_front_pending_id"),
+                document.get("scan_image_back_pending_id"),
+            )
+            if image_id
+        ]
+        try:
+            await self._collection.update_one(
+                {"_id": document["_id"]},
+                {
+                    "$set": {
+                        "scan_image_front_pending_id": None,
+                        "scan_image_back_pending_id": None,
+                        "scan_image_enhancement_status": "discarded",
+                        "scan_image_enhancement_error": None,
+                        "updated_at": datetime.now(UTC),
+                    }
+                },
+            )
+        except PyMongoError as exc:
+            raise CardPersistenceError("Failed to discard AI scan preview") from exc
+        if self._scan_review is not None:
+            await self._scan_review.delete_files(pending_ids)
+        updated = await self._get_owned_document(owner_user_id, document["_id"])
+        return self._to_response(updated)
+
     async def update(
         self,
         owner_user_id: str,
@@ -275,6 +396,23 @@ class UserCardService:
 
         if result.deleted_count == 0:
             raise UserCardNotFoundError(f"User card {card_id} not found.")
+
+        if self._scan_review is not None:
+            await self._scan_review.delete_files(
+                [
+                    image_id
+                    for image_id in (
+                        existing.get("scan_image_id"),
+                        existing.get("scan_image_front_id"),
+                        existing.get("scan_image_back_id"),
+                        existing.get("scan_image_front_original_id"),
+                        existing.get("scan_image_back_original_id"),
+                        existing.get("scan_image_front_pending_id"),
+                        existing.get("scan_image_back_pending_id"),
+                    )
+                    if image_id
+                ]
+            )
 
         if was_primary:
             await self._promote_next_primary(owner_user_id)
@@ -415,6 +553,12 @@ class UserCardService:
         return f"/api/v1/user-cards/{card_id}/scan-image/back?v={scan_image_back_id}"
 
     @staticmethod
+    def _pending_image_url(card_id: str, face: PhotoFace, pending_id: str | None) -> str | None:
+        if not pending_id:
+            return None
+        return f"/api/v1/user-cards/{card_id}/scan-image/{face}/pending?v={pending_id}"
+
+    @staticmethod
     def _resolve_wallet_display(document: dict, scan_image_id: str | None) -> WalletDisplay:
         stored = document.get("wallet_display")
         if stored in ("photo", "classic"):
@@ -448,11 +592,29 @@ class UserCardService:
             is_primary=document.get("is_primary", False),
             sort_order=document.get("sort_order", 0),
             scan_image_id=scan_image_front_id,
+            scan_image_front_id=scan_image_front_id,
+            scan_image_back_id=scan_image_back_id,
+            scan_image_front_original_id=document.get("scan_image_front_original_id"),
+            scan_image_back_original_id=document.get("scan_image_back_original_id"),
+            scan_image_front_pending_id=document.get("scan_image_front_pending_id"),
+            scan_image_back_pending_id=document.get("scan_image_back_pending_id"),
             created_at=document["created_at"],
             updated_at=document["updated_at"],
             scan_image_url=UserCardService._scan_image_url(card_id, scan_image_front_id),
             scan_image_front_url=UserCardService._scan_front_image_url(card_id, scan_image_front_id),
             scan_image_back_url=UserCardService._scan_back_image_url(card_id, scan_image_back_id),
+            scan_image_front_pending_url=UserCardService._pending_image_url(
+                card_id,
+                "front",
+                document.get("scan_image_front_pending_id"),
+            ),
+            scan_image_back_pending_url=UserCardService._pending_image_url(
+                card_id,
+                "back",
+                document.get("scan_image_back_pending_id"),
+            ),
+            scan_image_enhancement_status=document.get("scan_image_enhancement_status", "none"),
+            scan_image_enhancement_error=document.get("scan_image_enhancement_error"),
             wallet_display=UserCardService._resolve_wallet_display(document, scan_image_front_id),
             photo_face=UserCardService._resolve_photo_face(document),
         )

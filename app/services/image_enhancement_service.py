@@ -12,17 +12,34 @@ logger = logging.getLogger(__name__)
 
 
 ENHANCEMENT_PROMPT = """\
-Tightly crop out thin background borders and desk edges around the card.
-Mildly improve lighting only so printed text is clearer.
- 
-CRITICAL:
-- Preserve the original business-card aspect ratio (approx 85:54 / ~3:2 landscape).
-- Do NOT output a square image.
-- Do NOT stretch, squeeze, or pad to 1:1.
-- Keep the same orientation as the input (landscape stays landscape).
- 
-Do not redraw or alter any text, logos, or colors.
-Return only the cleaned cropped card image.
+Extract the physical business card using geometric cropping and perspective correction only.
+
+CROP:
+- Detect the four physical card edges.
+- Crop edge-to-edge so the card touches all four output edges.
+- Remove every pixel outside the card, including desk, table, fingers, shadows, and surroundings.
+- Do not add padding, margins, borders, or background fill.
+
+GEOMETRY:
+- Correct tilt and keystone distortion so the card appears flat and top-down.
+- Make opposite card edges parallel.
+- Preserve the card’s physical corners; do not redraw or reshape them.
+- Preserve the original landscape orientation and physical business-card proportions.
+
+CONTENT PRESERVATION — HIGHEST PRIORITY:
+- Treat everything inside the card boundary as immutable.
+- Preserve every character, digit, logo, underline, color, and design element exactly.
+- Do not redraw, retype, reconstruct, sharpen, replace, or reinterpret content.
+- Do not invent missing details.
+- If text is blurry, leave it blurry.
+- Do not add underlines or other marks.
+
+LIGHTING:
+- Apply only mild global lighting normalization if necessary.
+- Do not change ink, paper, logo, or background colors.
+
+Return only the cropped and perspective-corrected card image.
+Never output a square image.
 """
 
 
@@ -59,6 +76,14 @@ class ImageEnhancementService:
             ],
             "n": 1,
         }
+        if (
+            self._settings.openrouter_image_provider
+            and self._settings.openrouter_image_model.startswith("google/gemini")
+        ):
+            payload["provider"] = {
+                "only": [self._settings.openrouter_image_provider],
+                "allow_fallbacks": False,
+            }
         # OpenAI image models support these controls. Omitting them keeps the
         # request compatible if another OpenRouter image model is configured.
         if self._settings.openrouter_image_model.startswith("openai/"):
@@ -72,40 +97,23 @@ class ImageEnhancementService:
             "X-Title": self._settings.app_name,
         }
 
-        response: httpx.Response | None = None
-        max_attempts = self._settings.openrouter_max_retries + 1
-        for attempt in range(1, max_attempts + 1):
-            try:
-                async with httpx.AsyncClient(
-                    base_url=self._settings.openrouter_base_url,
-                    timeout=httpx.Timeout(self._settings.openrouter_image_timeout_seconds),
-                ) as client:
-                    response = await client.post(
-                        "/images",
-                        headers=headers,
-                        json=payload,
-                    )
-            except httpx.TimeoutException as exc:
-                if attempt >= max_attempts:
-                    raise OpenRouterTimeoutError("Image enhancement timed out") from exc
-                await asyncio.sleep(min(0.5 * attempt, 2.0))
-                continue
-            except httpx.RequestError as exc:
-                if attempt >= max_attempts:
-                    raise OpenRouterError(
-                        f"Image enhancement network error: {exc}",
-                    ) from exc
-                await asyncio.sleep(min(0.5 * attempt, 2.0))
-                continue
+        try:
+            async with httpx.AsyncClient(
+                base_url=self._settings.openrouter_base_url,
+                timeout=httpx.Timeout(self._settings.openrouter_image_timeout_seconds),
+            ) as client:
+                response = await client.post(
+                    "/images",
+                    headers=headers,
+                    json=payload,
+                )
+        except httpx.TimeoutException as exc:
+            raise OpenRouterTimeoutError("Image enhancement timed out") from exc
+        except httpx.RequestError as exc:
+            raise OpenRouterError(
+                f"Image enhancement network error: {exc}",
+            ) from exc
 
-            if response.status_code not in {429, 500, 502, 503, 504}:
-                break
-            if attempt >= max_attempts:
-                break
-            await asyncio.sleep(min(0.5 * attempt, 2.0))
-
-        if response is None:
-            raise OpenRouterError("Image enhancement request failed")
         if response.status_code >= 400:
             raise OpenRouterError(
                 f"Image enhancement failed: {response.text[:300]}",
@@ -147,14 +155,46 @@ class ImageEnhancementService:
         if not self._settings.openrouter_image_enhancement_enabled:
             return image_bytes, content_type, False
 
-        try:
-            enhanced_bytes, enhanced_content_type = await self.enhance(
-                image_bytes,
-                content_type,
-            )
-            return enhanced_bytes, enhanced_content_type, True
-        except OpenRouterError as exc:
-            # Image cleanup is cosmetic. A provider outage must not prevent the
-            # card and its original scan from being saved.
-            logger.warning("Image enhancement failed; storing original scan: %s", exc)
-            return image_bytes, content_type, False
+        max_attempts = max(1, self._settings.openrouter_image_max_attempts)
+        last_error: OpenRouterError | None = None
+        attempts_made = 0
+        for attempt in range(1, max_attempts + 1):
+            attempts_made = attempt
+            try:
+                enhanced_bytes, enhanced_content_type = await self.enhance(
+                    image_bytes,
+                    content_type,
+                )
+                if enhanced_bytes == image_bytes:
+                    raise OpenRouterError(
+                        "Image enhancement returned an unchanged image",
+                    )
+                return enhanced_bytes, enhanced_content_type, True
+            except OpenRouterError as exc:
+                last_error = exc
+                logger.warning(
+                    "Image enhancement attempt %s/%s failed: %s",
+                    attempt,
+                    max_attempts,
+                    exc,
+                )
+                if attempt < max_attempts and self._is_retryable(exc):
+                    await asyncio.sleep(min(0.5 * attempt, 2.0))
+                    continue
+                break
+
+        # Cosmetic cleanup must not block saving the card + original scan.
+        logger.warning(
+            "Image enhancement failed after %s attempts; storing original scan: %s",
+            attempts_made,
+            last_error,
+        )
+        return image_bytes, content_type, False
+
+    @staticmethod
+    def _is_retryable(exc: OpenRouterError) -> bool:
+        if exc.status_code is None or exc.status_code in {408, 429, 500, 502, 503, 504}:
+            return True
+        # Gemini occasionally completes a generation without emitting image bytes.
+        # The request itself is valid, so a fresh bounded generation can succeed.
+        return exc.status_code == 400 and "returned no image data" in str(exc).lower()
