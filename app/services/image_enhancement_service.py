@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 ENHANCEMENT_PROMPT = """\
 Extract the physical business card using geometric cropping and perspective correction only.
+This is a geometry-only edit. Do not perform photographic enhancement or color processing.
 
 CROP:
 - Detect the four physical card edges.
@@ -31,6 +32,7 @@ GEOMETRY:
 
 CONTENT PRESERVATION — HIGHEST PRIORITY:
 - Treat everything inside the card boundary as immutable.
+- Apart from pixel resampling required for perspective correction, copy the card interior directly from the input.
 - Preserve every character, digit, logo, underline, color, and design element exactly.
 - Do not redraw, retype, reconstruct, sharpen, replace, or reinterpret content.
 - Do not invent missing details.
@@ -39,6 +41,8 @@ CONTENT PRESERVATION — HIGHEST PRIORITY:
 
 APPEARANCE PRESERVATION:
 - Preserve the original scanned appearance exactly, including paper tone, background color, exposure, white balance, texture, grain, and flat scanner lighting.
+- The output paper/background color must match the input card color. White must remain the same white; never make it yellow, cream, warm, cool, brighter, or darker.
+- Preserve the input image's RGB color balance and average paper color exactly.
 - Do not relight, color-correct, white-balance, denoise, enhance contrast, add texture, or make the card look like a phone photograph.
 - Do not change ink, paper, logo, or background colors, even slightly.
 
