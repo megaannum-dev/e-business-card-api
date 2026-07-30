@@ -16,8 +16,11 @@ Extract the physical business card using geometric cropping and perspective corr
 
 CROP:
 - Detect the four physical card edges.
+- Use the outer edge of the card material as the crop boundary, never a printed line or design element.
 - Crop edge-to-edge so the card touches all four output edges.
 - Remove every pixel outside the card, including desk, table, fingers, shadows, and surroundings.
+- Inspect the bottom edge especially carefully. Remove any thin exterior strip, shadow, table edge, or scanner border beyond the physical card, even when it is perfectly straight and parallel to the card.
+- A straight line touching or near the bottom of the image is not automatically part of the design. Keep it only if it is clearly printed inside the physical card boundary.
 - Do not add padding, margins, borders, or background fill.
 
 GEOMETRY:
@@ -34,9 +37,10 @@ CONTENT PRESERVATION — HIGHEST PRIORITY:
 - If text is blurry, leave it blurry.
 - Do not add underlines or other marks.
 
-LIGHTING:
-- Apply only mild global lighting normalization if necessary.
-- Do not change ink, paper, logo, or background colors.
+APPEARANCE PRESERVATION:
+- Preserve the original scanned appearance exactly, including paper tone, background color, exposure, white balance, texture, grain, and flat scanner lighting.
+- Do not relight, color-correct, white-balance, denoise, enhance contrast, add texture, or make the card look like a phone photograph.
+- Do not change ink, paper, logo, or background colors, even slightly.
 
 Return only the cropped and perspective-corrected card image.
 Never output a square image.
