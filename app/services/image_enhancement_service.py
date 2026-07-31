@@ -12,39 +12,24 @@ logger = logging.getLogger(__name__)
 
 
 ENHANCEMENT_PROMPT = """\
-Extract the physical business card using geometric cropping and perspective correction only.
+Task: Complete strict geometric image cropping and perspective translation on the provided image. Do not generate or paint new artistic textures.
 
-CROP:
-- Detect the four physical card edges.
-- Use the outer edge of the card material as the crop boundary, never a printed line or design element.
-- Crop edge-to-edge so the card touches all four output edges.
-- Remove every pixel outside the card, including desk, table, fingers, shadows, and surroundings.
-- Inspect the bottom edge especially carefully. Remove any thin exterior strip, shadow, table edge, or scanner border beyond the physical card, even when it is perfectly straight and parallel to the card.
-- A straight line touching or near the bottom of the image is not automatically part of the design. Keep it only if it is clearly printed inside the physical card boundary.
-- Do not add padding, margins, borders, or background fill.
+GEOMETRIC BOUNDARIES:
+- Detect the 4 outermost physical edges of the card material.
+- Crop edge-to-edge so the card touches all four output borders. 
+- Delete 100% of pixels outside the card boundary (remove tables, scanner edges, hands, shadows).
+- Correct all tilt and keystone distortion to force a flat, top-down rectangular plane.
+- Maintain original horizontal landscape proportions. Never output a square image.
 
-GEOMETRY:
-- Correct tilt and keystone distortion so the card appears flat and top-down.
-- Make opposite card edges parallel.
-- Preserve the card’s physical corners; do not redraw or reshape them.
-- Preserve the original landscape orientation and physical business-card proportions.
+PIXEL INVARIANCE (COLOR PROTECTION MATRIX):
+- Treat the RGB pixel values inside the card as mathematical constants. 
+- Do not add lighting filters, contrast changes, denoising, or style enhancements.
+- The output background color must map 1:1 identically to the input image background. If the input background is white, the output must remain pure #FFFFFF white. Do not warm the tint or add cream, off-white, or beige hues.
+- Do not reconstruct, sharpen, or repaint logos, lines, or characters.
 
-CONTENT PRESERVATION — HIGHEST PRIORITY:
-- Treat everything inside the card boundary as immutable.
-- Preserve every character, digit, logo, underline, color, and design element exactly.
-- Do not redraw, retype, reconstruct, sharpen, replace, or reinterpret content.
-- Do not invent missing details.
-- If text is blurry, leave it blurry.
-- Do not add underlines or other marks.
+CRITICAL NEGATIVE CONSTRAINTS (DO NOT INCLUDE IN OUTPUT):
+[NEGATIVE_PROMPT: beige, cream, off-white, warm tones, studio lighting, yellow tint, gradient background, paper texture, ambient occlusion shadows, background bleeding]
 
-APPEARANCE PRESERVATION:
-- Preserve the original scanned appearance exactly, including paper tone, background color, exposure, white balance, texture, grain, and flat scanner lighting.
-- Do not relight, color-correct, white-balance, denoise, enhance contrast, add texture, or make the card look like a phone photograph.
-- Do not change ink, paper, logo, or background colors, even slightly.
-- Keep the original paper/background color exactly.
-
-Return only the cropped and perspective-corrected card image.
-Never output a square image.
 """
 
 

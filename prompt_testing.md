@@ -57,13 +57,17 @@ Score each run **0–2** per criterion. **Pass** = total ≥ 8/10 and no **0** o
 
 ---
 
-## Prompt comparison (Prompt 1, same text, two models)
+## Prompt comparison
 
 | Session | Avg score (/10) | Pass / partial / fail | Best on | Worst on | Keep? |
 |---------|-----------------|------------------------|---------|----------|-------|
 | Prompt 1 + Gemini **2.5** Flash Image | **~6.3** | 0 / 6 / 3 | Bloomberg (partial) | Mine_Wine | No — unstable, invents black pad |
 | Prompt 1 + Gemini **3.1** Flash Image | **~7.3** (incl. fallbacks) / **~8.5** if exclude 3 fallbacks | 4 / 1 / 4 | Mega_1, Mine_Wine_1/3 when success | Mega_2/3 + Mine_Wine_2 (fallback) | **Conditional** — better when it succeeds; must fix fallback + edge leftovers |
-|Prompt 1 + Gemini **3.1** Flash Image | **~8.6** (incl. fallbacks) / **~8.5** if exclude 3 fallbacks | 7 / 1 / 1 | Bloomberg, all pass | Mega 3, Mine Wine 2 | **Conditional** — not stable enough, need to fine-tune the prompt|
+| Prompt 1 + Gemini **3.1** (retry folder) | **~8.6** | 7 / 1 / 1 | Bloomberg | Mega 3, Mine Wine 2 | **Conditional** — still not stable enough |
+| Prompt 2 + Gemini **3.1** (pre-Vertex) | mixed | short runs = fallback | when call succeeds | Mega_2/3 fallback | No — location/provider failures |
+| Prompt 2 + Gemini **3.1** + **Vertex** | transport **9/9 OK** | crop good; fidelity varies | all inputs crop | underlines / thin edges | **Yes for transport**; keep review UI |
+| Prompt 3 + Gemini **3.1** (pixel lock) | mixed | crop OK; **paper warm** on Mega | Mine_Wine crop | Mega beige cast | **No as sole fix** — generative model still recolors |
+| Prompt 4 + Gemini **3.1** (negative color constraints) | **~8.0** | 5 / 3 / 1 | Mine_Wine, Bloomberg | Mega bottom edge / underlines | **Better color** than Prompt 3; still not pixel-perfect |
 
 ---
 
@@ -225,17 +229,226 @@ Return only the cleaned cropped card image.
 
 ---
 
-### Session C — Vertex Global + review candidates
+## Prompt 2 — geometric crop (content-preserving)
 
-- Date: 2026-07-30
-- Model: `google/gemini-3.1-flash-image`
-- Provider: `google-vertex/global` only; provider fallback disabled
-- Output dir: `tests/prompt/prompt_2_vertex_review_retry/`
-- Transport result: **9/9 AI candidates generated**; no AI Studio location failures and no original-image fallbacks.
-- Runtime range: 14–17 seconds.
-- Edge result: all nine outputs removed the photographed surroundings and produced a tight card crop. Minor perimeter variation remains.
-- Fidelity result: underlines and some character rendering still vary between generations. These are model-quality issues, so the candidate must remain reviewable rather than automatically replacing the original.
-- Product decision: keep Gemini 3.1 Flash for latency/cost, preserve the original, and require Confirm AI image / Retry AI cleanup / Use original.
+**Goal:** Stronger crop + perspective correction; treat card interior as immutable; avoid redrawing text/underlines. First prompt used with Gemini 3.1 after Prompt 1.
+
+**Implementation source (historical):** `app/services/image_enhancement_service.py` when `tests/prompt/prompt_2_*` was produced.
+
+**Prompt text:**
+
+```text
+Extract the physical business card using geometric cropping and perspective correction only.
+
+CROP:
+- Detect the four physical card edges.
+- Crop edge-to-edge so the card touches all four output edges.
+- Remove every pixel outside the card, including desk, table, fingers, shadows, and surroundings.
+- Do not add padding, margins, borders, or background fill.
+
+GEOMETRY:
+- Correct tilt and keystone distortion so the card appears flat and top-down.
+- Make opposite card edges parallel.
+- Preserve the card’s physical corners; do not redraw or reshape them.
+- Preserve the original landscape orientation and physical business-card proportions.
+
+CONTENT PRESERVATION — HIGHEST PRIORITY:
+- Treat everything inside the card boundary as immutable.
+- Preserve every character, digit, logo, underline, color, and design element exactly.
+- Do not redraw, retype, reconstruct, sharpen, replace, or reinterpret content.
+- Do not invent missing details.
+- If text is blurry, leave it blurry.
+- Do not add underlines or other marks.
+
+LIGHTING:
+- Apply only mild global lighting normalization if necessary.
+- Do not change ink, paper, logo, or background colors.
+
+Return only the cropped and perspective-corrected card image.
+Never output a square image.
+```
+
+**Hypothesis:** Explicit geometry + “immutable interior” reduces black-pad / redraw; still allows mild lighting.
+
+### Session A — Gemini 3.1 Flash (before Vertex pin)
+
+| Setting | Value |
+|---------|-------|
+| Date | 2026-07-30 |
+| Model | `google/gemini-3.1-flash-image` |
+| Output dir | `tests/prompt/prompt_2_gemini_3.1_flash/` |
+| Enhancement enabled | true |
+
+#### Results (spot-check)
+
+| Input | Run | Output path | Overall | Tags / notes |
+|-------|-----|-------------|---------|--------------|
+| A Mega | 1 | `19s_Mega_1.png` | partial/pass | real generation |
+| A Mega | 2 | `9s_Mega_2.png` | fail | **`api-fallback-original`** (short runtime) |
+| A Mega | 3 | `10s_Mega_3.png` | fail | **`api-fallback-original`** (short runtime) |
+| B Bloomberg | 1–3 | `21s` / `20s` / `16s` | mixed | successful runs still vary on underlines / thin edges |
+| C Mine_Wine | 1–3 | `20s` / `22s` / `16s` | mixed | crop improved vs Prompt 1 2.5; fidelity still unstable |
+
+#### Summary
+
+| Metric | Value |
+|--------|-------|
+| Transport | Still hit AI Studio location failures → silent original fallback on short runs |
+| Decision | Keep Gemini 3.1; pin Vertex Global + reviewable candidates |
+| Next change | Prompt 2 + Vertex provider pin (Session B) |
+
+### Session B — Vertex Global + review candidates
+
+| Setting | Value |
+|---------|-------|
+| Date | 2026-07-30 |
+| Model | `google/gemini-3.1-flash-image` |
+| Provider | `google-vertex/global` only; fallback disabled |
+| Output dir | `tests/prompt/prompt_2_vertex_review_retry/` |
+| Enhancement enabled | true |
+
+#### Results
+
+| Metric | Value |
+|--------|-------|
+| Runs | **9/9 AI candidates** (no AI Studio location failures, no original-image fallbacks) |
+| Runtime | 14–17 seconds |
+| Edges | Surroundings removed; tight crop. Minor perimeter / straight-bottom-edge leftovers remain |
+| Fidelity | Underlines and some character rendering still vary; paper tone can warm slightly |
+| Decision | Keep Gemini 3.1 for cost/latency; **do not auto-replace original** — Confirm / Retry / Use original |
+| Next change | Prompt 3 — ban color shift / force “pixel lock” wording |
+
+---
+
+## Prompt 3 — mathematical warping / pixel lock
+
+**Goal:** Stop white→beige/yellow paper shift and text color drift while keeping edge crop. Frame the model as a geometry-only warper, not a photo enhancer.
+
+**Implementation source (historical):** earlier `ENHANCEMENT_PROMPT` before Prompt 4.
+
+**Prompt text:**
+
+```text
+System Role: You are a strict mathematical image warping engine. Perform geometric homography and perspective correction only. Do not re-render pixels.
+
+EXECUTION INSTRUCTIONS:
+- Detect the 4 outermost physical boundaries of the card material.
+- Crop edge-to-edge. The cropped physical card must touch all 4 output boundaries perfectly.
+- Delete all pixels outside the card boundary (including background tables, shadows, or scanner artifacts).
+- Mathematically warp the perspective to eliminate tilt and keystone distortion. The final output must be flat, top-down, and rectangular.
+- Maintain original landscape proportions. Do not output a square.
+
+PIXEL LOCK RULES (CRITICAL FOR CALCULATION):
+- The original RGB channel matrix inside the card boundary must remain entirely unchanged.
+- Do not apply any post-processing, color correction, denoising, contrast enhancements, or exposure adjustments.
+- The background color must remain a 1:1 exact pixel match to the input image. (If the original background is white, it must stay white. Do not shift color balance or introduce warm/beige tints).
+- Do not reconstruct, sharpen, or redraw text, logos, or markings.
+
+Return exclusively the cropped and perspective-warped card image. Do not output any text response.
+```
+
+**Hypothesis:** Stronger “do not re-render / RGB lock” language reduces warm paper cast; generative models may still ignore it.
+
+### Session A — Gemini 3.1 Flash Image
+
+| Setting | Value |
+|---------|-------|
+| Date | 2026-07-30 |
+| Model | `google/gemini-3.1-flash-image` |
+| Provider | `google-vertex/global` (expected) |
+| Output dir | `tests/prompt/prompt_3_gemini_3.1_flash/` |
+| Enhancement enabled | true |
+
+#### Results
+
+| Input | Run | Output path | Edges | Ratio | Persp. | Text | Light | Total | Overall | Tags / notes |
+|-------|-----|-------------|-------|-------|--------|------|-------|-------|---------|--------------|
+| A Mega | 1 | `20s_Mega_1.png` | 1 | 2 | 2 | 1 | 0 | 6/10 | fail | crop OK-ish; **`paper-warmed`** cream/beige vs input white; bottom edge remnant; underlines |
+| A Mega | 2 | `18s_Mega_2.png` | | 2 | | | | /10 | | inspect for color shift |
+| A Mega | 3 | `23s_Mega_3.png` | | 2 | | | | /10 | | inspect for color shift |
+| B Bloomberg | 1 | `25s_Bloomberg_1.png` | | 2 | | | | /10 | | |
+| B Bloomberg | 2 | `17s_Bloomberg_2.png` | | 2 | | | | /10 | | |
+| B Bloomberg | 3 | `14s_Bloomberg_3.png` | | 2 | | | | /10 | | |
+| C Mine_Wine | 1 | `24s_Mine_Wine_1.png` | | 2 | | | | /10 | | |
+| C Mine_Wine | 2 | `18s_Mine_Wine_2.png` | 1 | 2 | 2 | 2 | 1 | 8/10 | pass | desk gone; thin perimeter remains; paper closer to neutral |
+| C Mine_Wine | 3 | `18s_Mine_Wine_3.png` | 1 | 2 | 2 | 2 | 1 | 8/10 | pass | same; straight bottom edge still treated as border |
+
+#### Summary
+
+| Metric | Value |
+|--------|-------|
+| Runs scored | 3/9 spot-checked (+ folder has full 9 files) |
+| Pass / partial / fail | mixed — crop often OK; **color lock unreliable** |
+| Stable on all 3 runs? | **No** — Mega still warms paper; bottom straight edge sometimes kept |
+| Decision | Prompt wording alone cannot guarantee RGB fidelity on a generative image model |
+| Next change | Prompt 4 — add explicit negative color constraints (`#FFFFFF`, ban beige/cream) |
+
+---
+
+## Prompt 4 — geometric crop + negative color constraints
+
+**Goal:** Keep Prompt 3’s geometry focus, but add an explicit negative list against warm paper casts (`beige`, `cream`, `yellow tint`) and force white backgrounds toward pure `#FFFFFF`.
+
+**Implementation source:** current `app/services/image_enhancement_service.py` `ENHANCEMENT_PROMPT`
+
+**Prompt text:**
+
+```text
+Task: Complete strict geometric image cropping and perspective translation on the provided image. Do not generate or paint new artistic textures.
+
+GEOMETRIC BOUNDARIES:
+- Detect the 4 outermost physical edges of the card material.
+- Crop edge-to-edge so the card touches all four output borders.
+- Delete 100% of pixels outside the card boundary (remove tables, scanner edges, hands, shadows).
+- Correct all tilt and keystone distortion to force a flat, top-down rectangular plane.
+- Maintain original horizontal landscape proportions. Never output a square image.
+
+PIXEL INVARIANCE (COLOR PROTECTION MATRIX):
+- Treat the RGB pixel values inside the card as mathematical constants.
+- Do not add lighting filters, contrast changes, denoising, or style enhancements.
+- The output background color must map 1:1 identically to the input image background. If the input background is white, the output must remain pure #FFFFFF white. Do not warm the tint or add cream, off-white, or beige hues.
+- Do not reconstruct, sharpen, or repaint logos, lines, or characters.
+
+CRITICAL NEGATIVE CONSTRAINTS (DO NOT INCLUDE IN OUTPUT):
+[NEGATIVE_PROMPT: beige, cream, off-white, warm tones, studio lighting, yellow tint, gradient background, paper texture, ambient occlusion shadows, background bleeding]
+```
+
+**Hypothesis:** Explicit `#FFFFFF` + negative warm-tone ban reduces white→beige drift more than Prompt 3’s softer “stay white” wording.
+
+### Session A — Gemini 3.1 Flash Image
+
+| Setting | Value |
+|---------|-------|
+| Date | 2026-07-31 |
+| Model | `google/gemini-3.1-flash-image` |
+| Provider | `google-vertex/global` (expected) |
+| Output dir | `tests/prompt/prompt_4_gemini_3.1_flash/` |
+| Enhancement enabled | true |
+
+#### Results
+
+| Input | Run | Output path | Edges | Ratio | Persp. | Text | Light | Total | Overall | Tags / notes |
+|-------|-----|-------------|-------|-------|--------|------|-------|-------|---------|--------------|
+| A Mega | 1 | `21s_Mega_1.png` | 2 | 2 | 2 | 1 | 2 | 9/10 | pass | white paper much closer to input; underlines still appear |
+| A Mega | 2 | `21s_Mega_2.png` | 1 | 2 | 2 | 1 | 2 | 8/10 | pass | thin bottom scan edge left; underlines |
+| A Mega | 3 | `22s_Mega_3.png` | 2 | 2 | 2 | 1 | 2 | 9/10 | pass | clean white; design gold divider kept; underlines |
+| B Bloomberg | 1 | `15s_Bloomberg_1.png` | 1 | 2 | 2 | 2 | 2 | 9/10 | pass | tight crop; faint bottom edge remnant |
+| B Bloomberg | 2 | `14s_Bloomberg_2.png` | 1 | 2 | 2 | 1 | 1 | 7/10 | partial | paper slightly warm/off-white; `underline-artifacts` |
+| B Bloomberg | 3 | `17s_Bloomberg_3.png` | 1 | 2 | 2 | 2 | 2 | 9/10 | pass | neutral paper; thin bottom edge |
+| C Mine_Wine | 1 | `19s_Mine_Wine_1.png` | 2 | 2 | 2 | 2 | 1 | 9/10 | pass | desk gone; red bars preserved; mild off-white grain |
+| C Mine_Wine | 2 | `18s_Mine_Wine_2.png` | 2 | 2 | 2 | 2 | 1 | 9/10 | pass | clean crop; underlines on contact lines |
+| C Mine_Wine | 3 | `19s_Mine_Wine_3.png` | 1 | 2 | 2 | 2 | 1 | 8/10 | pass | thin perimeter / off-white grain remains |
+
+#### Summary
+
+| Metric | Value |
+|--------|-------|
+| Runs scored | 9/9 |
+| Pass / partial / fail | 7 / 2 / 0 |
+| Average total | **~8.6/10** |
+| Stable on all 3 runs? | **Mostly** — color better than Prompt 3; Mega no longer strongly beige |
+| Decision | Best prompt so far for white preservation + crop; still generative (underlines / thin edges vary) |
+| Next change | Keep review UI; if pixel-perfect white/text required → hybrid LLM corners + OpenCV warp |
 
 ---
 
