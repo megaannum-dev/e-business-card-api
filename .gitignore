@@ -1,4 +1,5 @@
 .env
+env
 firebase-service-account.json
 firebase-service-account-dev.json
 secrets/
