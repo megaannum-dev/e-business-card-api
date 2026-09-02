@@ -46,6 +46,16 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.get("/health", include_in_schema=False)
+    async def health_check() -> dict[str, str]:
+        """Always-on liveness endpoint for the mobile app's connectivity check.
+
+        Unlike /docs, this is never gated behind ENABLE_DOCS / DEPLOY_ENV —
+        it carries no documentation content, just a plain 200 so clients can
+        tell the API is reachable before attempting a real request.
+        """
+        return {"status": "ok"}
+
     app.include_router(api_v1_router, prefix=settings.api_v1_prefix)
     app.include_router(share_web_router)
     app.include_router(privacy_router)
