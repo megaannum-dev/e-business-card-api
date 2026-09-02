@@ -13,6 +13,8 @@ services:
     ports:
       - "127.0.0.1:8002:8000"
     environment:
+      # Docs stay on (see Settings.enable_docs). Do not gate /docs on DEPLOY_ENV
+      # until the mobile app uses GET /health instead of /docs as its online check.
       DEPLOY_ENV: ${DEPLOY_ENV:-dev}
       MONGO_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb:27017
       MONGO_DB_NAME: ${MONGO_DB_NAME:-e_business_card}

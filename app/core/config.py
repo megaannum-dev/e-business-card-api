@@ -58,10 +58,15 @@ class Settings(BaseSettings):
 
     @property
     def enable_docs(self) -> bool:
-        """Swagger UI (/docs), ReDoc (/redoc) and /openapi.json are only
-        served when DEPLOY_ENV=dev. Never expose these on a public prod
-        server."""
-        return self.deploy_env.strip().lower() == "dev"
+        """Swagger UI (/docs), ReDoc (/redoc) and /openapi.json.
+
+        Always on for now: the current mobile app treats a missing /docs as
+        "API offline". Keep this True until the app ships a GET /health check.
+
+        Stored prod gate — restore this return after the frontend change:
+            return self.deploy_env.strip().lower() == "dev"
+        """
+        return True
 
 
 @lru_cache

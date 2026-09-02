@@ -16,6 +16,9 @@ services:
     network_mode: host
     command: ["uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8002"]
     environment:
+      # DEPLOY_ENV=prod does NOT hide /docs yet. The shipped app still probes /docs
+      # for connectivity; hiding it makes the API look offline. After the app uses
+      # GET /health, restore Settings.enable_docs to: deploy_env == "dev".
       DEPLOY_ENV: ${DEPLOY_ENV:-prod}
       MONGO_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@127.0.0.1:27017
       MONGO_DB_NAME: ${MONGO_DB_NAME:-e_business_card}
