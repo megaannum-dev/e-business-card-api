@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     app_name: str = "E-Business Card API"
     api_v1_prefix: str = "/api/v1"
     debug: bool = False
+    # Deployment target: "dev" or "prod" — set via DEPLOY_ENV in .env (see
+    # deploy/.env.dev.example / deploy/.env.production.example). Plain local
+    # `docker-compose.yml` doesn't set this, so it defaults to "dev".
+    deploy_env: str = "dev"
 
     mongo_uri: str = "mongodb://mongodb:27017"
     mongo_db_name: str = "e_business_card"
@@ -51,6 +55,13 @@ class Settings(BaseSettings):
     llm_rate_limit_per_day: int = 20
 
     firebase_credentials_path: str = ""
+
+    @property
+    def enable_docs(self) -> bool:
+        """Swagger UI (/docs), ReDoc (/redoc) and /openapi.json are only
+        served when DEPLOY_ENV=dev. Never expose these on a public prod
+        server."""
+        return self.deploy_env.strip().lower() == "dev"
 
 
 @lru_cache
