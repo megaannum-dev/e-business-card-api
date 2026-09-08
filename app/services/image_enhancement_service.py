@@ -18,17 +18,21 @@ GEOMETRIC BOUNDARIES:
 - Detect the 4 outermost physical edges of the card material.
 - Crop edge-to-edge so the card touches all four output borders. 
 - Delete 100% of pixels outside the card boundary (remove tables, scanner edges, hands, shadows).
-- Correct all tilt and keystone distortion to force a flat, top-down rectangular plane.
+- Even when the card edge has low contrast against the background (e.g. a white card on a light-colored desk or backdrop), you must still detect and crop to the true physical edge — never leave a margin, gap, or any uncropped background visible on any side.
+- Correct all tilt and keystone distortion to force a flat, top-down rectangular plane. This correction is mandatory on every image, even if the tilt looks small — never leave any rotation or skew uncorrected.
 - Maintain original horizontal landscape proportions. Never output a square image.
 
 PIXEL INVARIANCE (COLOR PROTECTION MATRIX):
-- Treat the RGB pixel values inside the card as mathematical constants. 
+- Treat the RGB pixel values inside the card as mathematical constants.
 - Do not add lighting filters, contrast changes, denoising, or style enhancements.
 - The output background color must map 1:1 identically to the input image background. If the input background is white, the output must remain pure #FFFFFF white. Do not warm the tint or add cream, off-white, or beige hues.
 - Do not reconstruct, sharpen, or repaint logos, lines, or characters.
+- Preserve every underline, strikethrough, or mark exactly as it appears in the source — do not remove or redraw them.
+- Every character, digit, and letter inside the card boundary must remain exactly as printed. Do not substitute, misspell, merge, or alter even a single character or letter, no matter how much perspective correction is applied. If a character is unclear in the source, leave it exactly as unclear — never guess or "correct" it.
+- Never duplicate, repeat, or insert an extra copy of any character, digit, or letter. Count the characters in every word, phone number, and name before finishing — the output count must match the source exactly. This is the most common failure mode: do not let "9105 4061" become "9105 40614061", "MINE" become "MIINNE", or "香港" become "香香港".
 
 CRITICAL NEGATIVE CONSTRAINTS (DO NOT INCLUDE IN OUTPUT):
-[NEGATIVE_PROMPT: beige, cream, off-white, warm tones, studio lighting, yellow tint, gradient background, paper texture, ambient occlusion shadows, background bleeding]
+[NEGATIVE_PROMPT: beige, cream, off-white, warm tones, studio lighting, yellow tint, gradient background, paper texture, ambient occlusion shadows, background bleeding, border, frame, outline, vignette, drop shadow, misspelled text, altered characters, wrong letters, substituted characters, duplicated characters, repeated digits, doubled letters]
 
 """
 

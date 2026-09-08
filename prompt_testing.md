@@ -8,7 +8,9 @@ Track image-enhancement prompt iterations for edge cleanup. One **prompt version
 2. Create an output folder, then run the test script (3× per input by default).
 3. Score each run with the rubric below; note failures in **Notes**.
 4. Fill the **Summary** row when all runs for that prompt are done.
-5. If wall time is **&lt; ~8s**, check whether the file hash matches the input — that usually means **API fallback to original**, not a fast good crop.
+5. If wall time is **< ~8s**, check whether the file hash matches the input — that usually means **API fallback to original**, not a fast good crop.
+
+
 
 ### Automated test script
 
@@ -29,57 +31,85 @@ The script warns when a downloaded image is **byte-identical to the input** (`ap
 
 ---
 
+
+
 ## Fixed inputs
 
-| ID | File | Card type | Known challenge |
-|----|------|-----------|-----------------|
-| A | `tests/prompt/inputs/Mega.png` | White bilingual card + crest logo | Thin scanner edge / paper shadow; model often **pads black** instead of cropping |
-| B | `tests/prompt/inputs/Bloomberg.jpeg` | Dense text, tight margins | Bottom edge remnant; generative **underline artifacts** |
-| C | `tests/prompt/inputs/Mine_Wine.png` | White card on cream desk, slight tilt | Low-contrast desk vs card; hardest crop; often left uncropped |
+
+| ID  | File                                 | Card type                             | Known challenge                                                                  |
+| --- | ------------------------------------ | ------------------------------------- | -------------------------------------------------------------------------------- |
+| A   | `tests/prompt/inputs/Mega.png`       | White bilingual card + crest logo     | Thin scanner edge / paper shadow; model often **pads black** instead of cropping |
+| B   | `tests/prompt/inputs/Bloomberg.jpeg` | Dense text, tight margins             | Bottom edge remnant; generative **underline artifacts**                          |
+| C   | `tests/prompt/inputs/Mine_Wine.png`  | White card on cream desk, slight tilt | Low-contrast desk vs card; hardest crop; often left uncropped                    |
+
 
 ---
+
+
 
 ## Scoring rubric
 
 Score each run **0–2** per criterion. **Pass** = total ≥ 8/10 and no **0** on edges or aspect ratio.
 
-| Criterion | 0 | 1 | 2 |
-|-----------|---|---|---|
-| **Edges removed** | Background/desk clearly visible | Thin border or shadow remains | Clean crop to card boundary |
-| **Aspect ratio** | Square or clearly wrong shape | Slight stretch/squeeze | ~3:2 landscape preserved |
-| **Perspective** | Skew unchanged or worse | Partial straighten | Card looks flat / aligned |
-| **Text fidelity** | Text redrawn, missing, or blurred | Minor artifact | Text/logos unchanged |
-| **Lighting** | Over-processed or too dark | Acceptable | Mild improvement only |
+
+| Criterion         | 0                                 | 1                             | 2                           |
+| ----------------- | --------------------------------- | ----------------------------- | --------------------------- |
+| **Edges removed** | Background/desk clearly visible   | Thin border or shadow remains | Clean crop to card boundary |
+| **Aspect ratio**  | Square or clearly wrong shape     | Slight stretch/squeeze        | ~3:2 landscape preserved    |
+| **Perspective**   | Skew unchanged or worse           | Partial straighten            | Card looks flat / aligned   |
+| **Text fidelity** | Text redrawn, missing, or blurred | Minor artifact                | Text/logos unchanged        |
+| **Lighting**      | Over-processed or too dark        | Acceptable                    | Mild improvement only       |
+
 
 **Overall:** `pass` | `partial` | `fail`
 
-**Common failure tags:** `edge-left` `edge-right` `desk-visible` `black-pad` `square-output` `aspect-wrong` `text-altered` `underline-artifacts` `timeout` `api-fallback-original`
+**Common failure tags:** `edge-left` `edge-right` `desk-visible` `black-pad` `square-output` `aspect-wrong` `text-altered` `underline-artifacts` `timeout` `api-fallback-original` `added-border`
 
 ---
+
+
 
 ## Prompt comparison
 
-| Session | Avg score (/10) | Pass / partial / fail | Best on | Worst on | Keep? |
-|---------|-----------------|------------------------|---------|----------|-------|
-| Prompt 1 + Gemini **2.5** Flash Image | **~6.3** | 0 / 6 / 3 | Bloomberg (partial) | Mine_Wine | No — unstable, invents black pad |
-| Prompt 1 + Gemini **3.1** Flash Image | **~7.3** (incl. fallbacks) / **~8.5** if exclude 3 fallbacks | 4 / 1 / 4 | Mega_1, Mine_Wine_1/3 when success | Mega_2/3 + Mine_Wine_2 (fallback) | **Conditional** — better when it succeeds; must fix fallback + edge leftovers |
-| Prompt 1 + Gemini **3.1** (retry folder) | **~8.6** | 7 / 1 / 1 | Bloomberg | Mega 3, Mine Wine 2 | **Conditional** — still not stable enough |
-| Prompt 2 + Gemini **3.1** (pre-Vertex) | mixed | short runs = fallback | when call succeeds | Mega_2/3 fallback | No — location/provider failures |
-| Prompt 2 + Gemini **3.1** + **Vertex** | transport **9/9 OK** | crop good; fidelity varies | all inputs crop | underlines / thin edges | **Yes for transport**; keep review UI |
-| Prompt 3 + Gemini **3.1** (pixel lock) | mixed | crop OK; **paper warm** on Mega | Mine_Wine crop | Mega beige cast | **No as sole fix** — generative model still recolors |
-| Prompt 4 + Gemini **3.1** (negative color constraints) | **~8.0** | 5 / 3 / 1 | Mine_Wine, Bloomberg | Mega bottom edge / underlines | **Better color** than Prompt 3; still not pixel-perfect |
+
+| Session                                                                                                                                                                                                                                                                                          | Avg score (/10)                                              | Pass / partial / fail           | Best on                                                                               | Worst on                                                                                                                                                                                                                                                        | Keep?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prompt 1 + Gemini **2.5** Flash Image                                                                                                                                                                                                                                                            | **~6.3**                                                     | 0 / 6 / 3                       | Bloomberg (partial)                                                                   | Mine_Wine                                                                                                                                                                                                                                                       | No — unstable, invents black pad                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Prompt 1 + Gemini **3.1** Flash Image                                                                                                                                                                                                                                                            | **~7.3** (incl. fallbacks) / **~8.5** if exclude 3 fallbacks | 4 / 1 / 4                       | Mega_1, Mine_Wine_1/3 when success                                                    | Mega_2/3 + Mine_Wine_2 (fallback)                                                                                                                                                                                                                               | **Conditional** — better when it succeeds; must fix fallback + edge leftovers                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Prompt 1 + Gemini **3.1** (retry folder)                                                                                                                                                                                                                                                         | **~8.6**                                                     | 7 / 1 / 1                       | Bloomberg                                                                             | Mega 3, Mine Wine 2                                                                                                                                                                                                                                             | **Conditional** — still not stable enough                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Prompt 2 + Gemini **3.1** (pre-Vertex)                                                                                                                                                                                                                                                           | mixed                                                        | short runs = fallback           | when call succeeds                                                                    | Mega_2/3 fallback                                                                                                                                                                                                                                               | No — location/provider failures                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Prompt 2 + Gemini **3.1** + **Vertex**                                                                                                                                                                                                                                                           | transport **9/9 OK**                                         | crop good; fidelity varies      | all inputs crop                                                                       | underlines / thin edges                                                                                                                                                                                                                                         | **Yes for transport**; keep review UI                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Prompt 3 + Gemini **3.1** (pixel lock)                                                                                                                                                                                                                                                           | mixed                                                        | crop OK; **paper warm** on Mega | Mine_Wine crop                                                                        | Mega beige cast                                                                                                                                                                                                                                                 | **No as sole fix** — generative model still recolors                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Prompt 4 + Gemini **3.1** (negative color constraints)                                                                                                                                                                                                                                           | **~8.0**                                                     | 5 / 3 / 1                       | Mine_Wine, Bloomberg                                                                  | Mega bottom edge / underlines                                                                                                                                                                                                                                   | **Better color** than Prompt 3; still not pixel-perfect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Prompt 5 + **Flux.2 Pro** (model swap only, no prompt change) | ~7.5 (n=3 smoke test) | 0/3/0 | Mine_Wine | Mega/Bloomberg (`added-border`) | Superseded by Prompt 6 — border found here |
+| Prompt 6 + **Flux.2 Pro** (+ border/frame ban) | 7.2 (n=9) | 5/4/0 | Mega | Mine_Wine — 2 text-char errors, 0 digit | `added-border` fixed (0/9); 1/9 over 40s |
+| Prompt 6 + **Flux.2 Klein 4B** (same prompt, model swap) | 5.9 (n=9) | 0/9/0 | Bloomberg | Mega/Mine_Wine — 5 text-char + **1 digit error** | Border 9/9; worst text fidelity; fastest (18.2s) |
+| Prompt 6 + **Grok Imagine** (same prompt, model swap) | 8.3 (n=9) | 4/1/4 | Mega | Bloomberg crop; Mine_Wine 2 text-char + 1 perspective fail | Fast + accurate; crop reliability is the weak point |
+| Prompt 6 + **Seedream 4.5** (same prompt, model swap) | 4.3 (n=9) | 0/0/9 | — | All 9 — crop/perspective unprocessed, square output, color violations | Fails core task despite being OpenRouter's own example model |
+| Prompt 7 + **Grok Imagine** (+ mandatory-perspective + low-contrast-edge + preserve-underlines) | 8.6 (n=9) | 2/7/0 | Mega; Mine_Wine run 3 (fixed) | Bloomberg crop unchanged; 薈→舊 recurring | Perspective fix worked; two remaining defects look model-level |
+| Prompt 8 + **Flux.2 Klein 4B** (+ anti-duplication; verified retest, corrects an earlier unverified/deleted row) | 6.4 (n=9) | — | Mega | Bloomberg/Mine_Wine — border 7/9, minor char-insertion errors 5/9 | Fast (13.7s) but border persists |
+| Prompt 9 + **Flux.2 Klein 4B** (+ zero-darkening/paper-boundary; reverted) | 3.6 (n=9) | 0/0/9 | Mine_Wine | Mega — border regression + 1 digit error + 97s outlier; Bloomberg — border/tint | Regression — reverted, don't reuse |
+| Prompt 8 + **Grok Imagine** | 8.4 (n=9) | 6/3/0 | Mega | Bloomberg — tighter than P7 but not eliminated; 薈→舊 3/3 | Best confirmed Grok result |
+| Prompt 10 + **Grok Imagine Image Quality** (Prompt 8 text + self-check instruction: "verify no background remains in corners/edges before finishing; don't fix via a border") | user-scored **4/4/1** — performs poorly | 4 / 4 / 1 | Bloomberg (3/3, targeted fix worked, tighter than P8) | Mega 2/3 + Mine_Wine 2/3 — uncorrected tilt / desk visible, regressing Prompt 7's perspective fix | **No, revert to Prompt 8** — fixed Bloomberg but broke perspective reliability elsewhere (3rd "fix A, break B" case); text was perfect this round (0/9 errors) but not worth the tradeoff |
+
+
+
 
 ---
+
+
 
 ## Analysis — why short runs (4s / 5s / 6s) look bad
 
 Verified by SHA-256 hash:
 
-| Output | Wall time | Result |
-|--------|-----------|--------|
-| `5s_Mega_2.png` | 5s | **Byte-identical to** `inputs/Mega.png` |
-| `6s_Mega_3.png` | 6s | **Byte-identical to** `inputs/Mega.png` |
-| `4s_Mine_Wine_2.png` | 4s | **Byte-identical to** `inputs/Mine_Wine.png` |
+
+| Output               | Wall time | Result                                       |
+| -------------------- | --------- | -------------------------------------------- |
+| `5s_Mega_2.png`      | 5s        | **Byte-identical to** `inputs/Mega.png`      |
+| `6s_Mega_3.png`      | 6s        | **Byte-identical to** `inputs/Mega.png`      |
+| `4s_Mine_Wine_2.png` | 4s        | **Byte-identical to** `inputs/Mine_Wine.png` |
+
 
 Those are **not** “fast successful enhancements.” They are the app’s silent fallback:
 
@@ -89,11 +119,15 @@ Confirmed in API logs for Gemini 3.1 short runs:
 
 `Image enhancement failed: ... "User location is not supported for the API use." ... provider_name: Google AI Studio`
 
-So wall-clock is short because the **image model call failed early** (location/provider block), while OCR still succeeded. Successful Gemini image runs in this set clustered around **~12–26s**. Rule of thumb: **&lt; ~8s + looks like input ⇒ treat as fallback fail**, not a model quality sample.
+So wall-clock is short because the **image model call failed early** (location/provider block), while OCR still succeeded. Successful Gemini image runs in this set clustered around **~12–26s**. Rule of thumb: **< ~8s + looks like input ⇒ treat as fallback fail**, not a model quality sample.
 
 ---
 
+
+
 ## Analysis — model comparison (same Prompt 1)
+
+
 
 ### Gemini 2.5 Flash Image (`prompt_1_gemini_2.5_flash/`)
 
@@ -104,6 +138,8 @@ So wall-clock is short because the **image model call failed early** (location/p
   - Bloomberg mostly “almost cropped” but bottom edge / noise / underline artifacts remain.
 - Never reached a clean pass on this set.
 
+
+
 ### Gemini 3.1 Flash Image (`prompt_1_gemini_3.1_flash/`)
 
 - When the call succeeds (~17–26s), quality is **clearly better**:
@@ -113,25 +149,25 @@ So wall-clock is short because the **image model call failed early** (location/p
 - **3/9 runs were fallbacks** (4–6s identical originals) → reliability problem, not just prompt quality.
 - Aspect ratio sometimes drifts toward squarer frames (~1296×816) even when content is OK.
 
+
+
 ### What to improve next
 
 1. **Treat fallback as a first-class signal**
-   - Log / return whether enhancement applied (`enhanced: true/false`).
-   - In prompt testing, **discard** identical-to-input runs from quality averages (or score them as fail with tag `api-fallback-original`).
-   - Optionally retry image enhancement 1–2× before falling back.
-
+  - Log / return whether enhancement applied (`enhanced: true/false`).
+  - In prompt testing, **discard** identical-to-input runs from quality averages (or score them as fail with tag `api-fallback-original`).
+  - Optionally retry image enhancement 1–2× before falling back.
 2. **Keep Gemini 3.1 over 2.5 for this task**, then tighten Prompt 2:
-   - Explicit: “Do **not** pad with black/white/any fill. Output frame = card rectangle only.”
-   - Explicit: “Do not redraw underlines or OCR boxes.”
-   - Explicit: “Preserve every Chinese character exactly.”
-
-3. **Pin aspect ratio in the `/images` payload** (`aspect_ratio: "3:2"`) for Gemini — supported on both models; reduces square-ish drift.
-
+  - Explicit: “Do **not** pad with black/white/any fill. Output frame = card rectangle only.”
+  - Explicit: “Do not redraw underlines or OCR boxes.”
+  - Explicit: “Preserve every Chinese character exactly.”
+3. **Pin aspect ratio in the** `/images` **payload** (`aspect_ratio: "3:2"`) for Gemini — supported on both models; reduces square-ish drift.
 4. **Hard cases (Mine_Wine cream desk)** may still need a hybrid later (CV crop after LLM, or a stronger model like Gemini 3 Pro Image / OpenAI gpt-image). Prompt alone will keep oscillating.
-
 5. **Latency budget**: set expectation that good runs take ~15–25s; short runs need investigation, not celebration.
 
 ---
+
+
 
 ## Prompt 1 — baseline (strong edge removal)
 
@@ -157,83 +193,109 @@ Must not:
 Return only the cleaned cropped card image.
 ```
 
+
+
 ### Session A — Gemini 2.5 Flash Image
 
-| Setting | Value |
-|---------|-------|
-| Date | 2026-07-30 |
-| Model | `google/gemini-2.5-flash-image` |
-| Output dir | `tests/prompt/prompt_1_gemini_2.5_flash/` |
-| Enhancement enabled | true |
+
+| Setting             | Value                                     |
+| ------------------- | ----------------------------------------- |
+| Date                | 2026-07-30                                |
+| Model               | `google/gemini-2.5-flash-image`           |
+| Output dir          | `tests/prompt/prompt_1_gemini_2.5_flash/` |
+| Enhancement enabled | true                                      |
+
+
+
 
 #### Results
 
-| Input | Run | Output path | Edges | Ratio | Persp. | Text | Light | Total | Overall | Tags / notes |
-|-------|-----|-------------|-------|-------|--------|------|-------|-------|---------|--------------|
-| A Mega | 1 | `19s_mega_1.png` | 0 | 2 | 2 | 2 | 1 | 7/10 | partial | `black-pad` — invents thick black frame instead of crop |
-| A Mega | 2 | `13s_mega_2.png` | 1 | 2 | 1 | 2 | 1 | 7/10 | partial | thin top/right edge; slight skew left |
-| A Mega | 3 | `13s_mega_3.png` | 0 | 2 | 2 | 2 | 1 | 7/10 | partial | `black-pad` again — unstable vs run 2 |
-| B Bloomberg | 1 | `17s_Bloomberg_1.png` | 1 | 2 | 2 | 1 | 1 | 7/10 | partial | bottom edge remnant; `underline-artifacts` |
-| B Bloomberg | 2 | `14s_Bloomberg_2.png` | 1 | 2 | 2 | 1 | 1 | 7/10 | partial | dark perimeter + grain; underlines |
-| B Bloomberg | 3 | `16s_Bloomberg_3.png` | 1 | 2 | 2 | 1 | 1 | 7/10 | partial | similar to B1/B2 |
-| C Mine_Wine | 1 | `14s_Mine_Wine_1.png` | 0 | 2 | 0 | 2 | 1 | 5/10 | fail | `desk-visible`; tilt unchanged |
-| C Mine_Wine | 2 | `17s_Mine_Wine_2.png` | 0 | 2 | 1 | 2 | 1 | 6/10 | fail | background / edge remain |
-| C Mine_Wine | 3 | `12s_Mine_Wine_3.png` | 0 | 2 | 1 | 2 | 1 | 6/10 | fail | black/desk surround; not tight crop |
+
+| Input       | Run | Output path           | Edges | Ratio | Persp. | Text | Light | Total | Overall | Tags / notes                                            |
+| ----------- | --- | --------------------- | ----- | ----- | ------ | ---- | ----- | ----- | ------- | ------------------------------------------------------- |
+| A Mega      | 1   | `19s_mega_1.png`      | 0     | 2     | 2      | 2    | 1     | 7/10  | partial | `black-pad` — invents thick black frame instead of crop |
+| A Mega      | 2   | `13s_mega_2.png`      | 1     | 2     | 1      | 2    | 1     | 7/10  | partial | thin top/right edge; slight skew left                   |
+| A Mega      | 3   | `13s_mega_3.png`      | 0     | 2     | 2      | 2    | 1     | 7/10  | partial | `black-pad` again — unstable vs run 2                   |
+| B Bloomberg | 1   | `17s_Bloomberg_1.png` | 1     | 2     | 2      | 1    | 1     | 7/10  | partial | bottom edge remnant; `underline-artifacts`              |
+| B Bloomberg | 2   | `14s_Bloomberg_2.png` | 1     | 2     | 2      | 1    | 1     | 7/10  | partial | dark perimeter + grain; underlines                      |
+| B Bloomberg | 3   | `16s_Bloomberg_3.png` | 1     | 2     | 2      | 1    | 1     | 7/10  | partial | similar to B1/B2                                        |
+| C Mine_Wine | 1   | `14s_Mine_Wine_1.png` | 0     | 2     | 0      | 2    | 1     | 5/10  | fail    | `desk-visible`; tilt unchanged                          |
+| C Mine_Wine | 2   | `17s_Mine_Wine_2.png` | 0     | 2     | 1      | 2    | 1     | 6/10  | fail    | background / edge remain                                |
+| C Mine_Wine | 3   | `12s_Mine_Wine_3.png` | 0     | 2     | 1      | 2    | 1     | 6/10  | fail    | black/desk surround; not tight crop                     |
+
+
+
 
 #### Summary
 
-| Metric | Value |
-|--------|-------|
-| Runs scored | 9/9 |
-| Pass / partial / fail | 0 / 6 / 3 |
-| Average total | ~6.3/10 |
-| Stable on all 3 runs? | **No** — Mega flips black-pad ↔ near-crop |
-| Decision | discard as production model for this prompt |
-| Next change | switch model → Gemini 3.1 (done below) |
+
+| Metric                | Value                                       |
+| --------------------- | ------------------------------------------- |
+| Runs scored           | 9/9                                         |
+| Pass / partial / fail | 0 / 6 / 3                                   |
+| Average total         | ~6.3/10                                     |
+| Stable on all 3 runs? | **No** — Mega flips black-pad ↔ near-crop   |
+| Decision              | discard as production model for this prompt |
+| Next change           | switch model → Gemini 3.1 (done below)      |
+
 
 ---
+
+
 
 ### Session B — Gemini 3.1 Flash Image
 
-| Setting | Value |
-|---------|-------|
-| Date | 2026-07-30 |
-| Model | `google/gemini-3.1-flash-image` |
-| Output dir | `tests/prompt/prompt_1_gemini_3.1_flash/` |
-| Enhancement enabled | true |
+
+| Setting             | Value                                     |
+| ------------------- | ----------------------------------------- |
+| Date                | 2026-07-30                                |
+| Model               | `google/gemini-3.1-flash-image`           |
+| Output dir          | `tests/prompt/prompt_1_gemini_3.1_flash/` |
+| Enhancement enabled | true                                      |
+
+
+
 
 #### Results
 
-| Input | Run | Output path | Edges | Ratio | Persp. | Text | Light | Total | Overall | Tags / notes |
-|-------|-----|-------------|-------|-------|--------|------|-------|-------|---------|--------------|
-| A Mega | 1 | `21s_Mega_1.png` | 1 | 2 | 2 | 2 | 2 | 9/10 | pass | best Mega; tiny top/bottom edge remnant |
-| A Mega | 2 | `5s_Mega_2.png` | 0 | 2 | 0 | 2 | 1 | 5/10 | fail | **`api-fallback-original`** — hash = input Mega.png |
-| A Mega | 3 | `6s_Mega_3.png` | 0 | 2 | 0 | 2 | 1 | 5/10 | fail | **`api-fallback-original`** — identical to Mega_2 / input |
-| B Bloomberg | 1 | `26s_Bloomberg_1.png` | 2 | 2 | 2 | 1 | 1 | 8/10 | pass | tight crop; `underline-artifacts` |
-| B Bloomberg | 2 | `17s_Bloomberg_2.png` | 1 | 2 | 2 | 2 | 2 | 9/10 | pass | cleanest Bloomberg; micro edge only |
-| B Bloomberg | 3 | `22s_Bloomberg_3.png` | 1 | 2 | 2 | 1 | 1 | 7/10 | partial | thin bottom/right edge + underlines |
-| C Mine_Wine | 1 | `20s_Mine_Wine_1.png` | 1 | 2 | 2 | 1 | 2 | 8/10 | pass | desk mostly gone; check Chinese glyph fidelity |
-| C Mine_Wine | 2 | `4s_Mine_Wine_2.png` | 0 | 2 | 0 | 2 | 1 | 5/10 | fail | **`api-fallback-original`** — hash = input Mine_Wine.png |
-| C Mine_Wine | 3 | `20s_Mine_Wine_3.png` | 1 | 2 | 2 | 2 | 2 | 9/10 | pass | thin dark perimeter remains |
+
+| Input       | Run | Output path           | Edges | Ratio | Persp. | Text | Light | Total | Overall | Tags / notes                                          |
+| ----------- | --- | --------------------- | ----- | ----- | ------ | ---- | ----- | ----- | ------- | ----------------------------------------------------- |
+| A Mega      | 1   | `21s_Mega_1.png`      | 1     | 2     | 2      | 2    | 2     | 9/10  | pass    | best Mega; tiny top/bottom edge remnant               |
+| A Mega      | 2   | `5s_Mega_2.png`       | 0     | 2     | 0      | 2    | 1     | 5/10  | fail    | `api-fallback-original` — hash = input Mega.png       |
+| A Mega      | 3   | `6s_Mega_3.png`       | 0     | 2     | 0      | 2    | 1     | 5/10  | fail    | `api-fallback-original` — identical to Mega_2 / input |
+| B Bloomberg | 1   | `26s_Bloomberg_1.png` | 2     | 2     | 2      | 1    | 1     | 8/10  | pass    | tight crop; `underline-artifacts`                     |
+| B Bloomberg | 2   | `17s_Bloomberg_2.png` | 1     | 2     | 2      | 2    | 2     | 9/10  | pass    | cleanest Bloomberg; micro edge only                   |
+| B Bloomberg | 3   | `22s_Bloomberg_3.png` | 1     | 2     | 2      | 1    | 1     | 7/10  | partial | thin bottom/right edge + underlines                   |
+| C Mine_Wine | 1   | `20s_Mine_Wine_1.png` | 1     | 2     | 2      | 1    | 2     | 8/10  | pass    | desk mostly gone; check Chinese glyph fidelity        |
+| C Mine_Wine | 2   | `4s_Mine_Wine_2.png`  | 0     | 2     | 0      | 2    | 1     | 5/10  | fail    | `api-fallback-original` — hash = input Mine_Wine.png  |
+| C Mine_Wine | 3   | `20s_Mine_Wine_3.png` | 1     | 2     | 2      | 2    | 2     | 9/10  | pass    | thin dark perimeter remains                           |
+
+
+
 
 #### Summary
 
-| Metric | Value |
-|--------|-------|
-| Runs scored | 9/9 |
-| Pass / partial / fail | 4 / 1 / 4 |
-| Average total | ~7.3/10 (all) · **~8.5/10** (6 successful generations only) |
-| Stable on all 3 runs? | **No** — 3/9 silent fallbacks; successful runs much better than 2.5 |
-| Decision | keep as candidate model; fix reliability + Prompt 2 |
-| Next change | (1) surface enhancement success flag / retry on fail (2) Prompt 2 ban black-pad + underlines (3) set `aspect_ratio: "3:2"` (4) optional Gemini 3 Pro / OpenAI if Mine_Wine still flaky |
+
+| Metric                | Value                                                                                                                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runs scored           | 9/9                                                                                                                                                                                    |
+| Pass / partial / fail | 4 / 1 / 4                                                                                                                                                                              |
+| Average total         | ~7.3/10 (all) · **~8.5/10** (6 successful generations only)                                                                                                                            |
+| Stable on all 3 runs? | **No** — 3/9 silent fallbacks; successful runs much better than 2.5                                                                                                                    |
+| Decision              | keep as candidate model; fix reliability + Prompt 2                                                                                                                                    |
+| Next change           | (1) surface enhancement success flag / retry on fail (2) Prompt 2 ban black-pad + underlines (3) set `aspect_ratio: "3:2"` (4) optional Gemini 3 Pro / OpenAI if Mine_Wine still flaky |
+
 
 ---
+
+
 
 ## Prompt 2 — geometric crop (content-preserving)
 
 **Goal:** Stronger crop + perspective correction; treat card interior as immutable; avoid redrawing text/underlines. First prompt used with Gemini 3.1 after Prompt 1.
 
-**Implementation source (historical):** `app/services/image_enhancement_service.py` when `tests/prompt/prompt_2_*` was produced.
+**Implementation source (historical):** `app/services/image_enhancement_service.py` when `tests/prompt/prompt_2_`* was produced.
 
 **Prompt text:**
 
@@ -272,53 +334,73 @@ Never output a square image.
 
 ### Session A — Gemini 3.1 Flash (before Vertex pin)
 
-| Setting | Value |
-|---------|-------|
-| Date | 2026-07-30 |
-| Model | `google/gemini-3.1-flash-image` |
-| Output dir | `tests/prompt/prompt_2_gemini_3.1_flash/` |
-| Enhancement enabled | true |
+
+| Setting             | Value                                     |
+| ------------------- | ----------------------------------------- |
+| Date                | 2026-07-30                                |
+| Model               | `google/gemini-3.1-flash-image`           |
+| Output dir          | `tests/prompt/prompt_2_gemini_3.1_flash/` |
+| Enhancement enabled | true                                      |
+
+
+
 
 #### Results (spot-check)
 
-| Input | Run | Output path | Overall | Tags / notes |
-|-------|-----|-------------|---------|--------------|
-| A Mega | 1 | `19s_Mega_1.png` | partial/pass | real generation |
-| A Mega | 2 | `9s_Mega_2.png` | fail | **`api-fallback-original`** (short runtime) |
-| A Mega | 3 | `10s_Mega_3.png` | fail | **`api-fallback-original`** (short runtime) |
-| B Bloomberg | 1–3 | `21s` / `20s` / `16s` | mixed | successful runs still vary on underlines / thin edges |
-| C Mine_Wine | 1–3 | `20s` / `22s` / `16s` | mixed | crop improved vs Prompt 1 2.5; fidelity still unstable |
+
+| Input       | Run | Output path           | Overall      | Tags / notes                                           |
+| ----------- | --- | --------------------- | ------------ | ------------------------------------------------------ |
+| A Mega      | 1   | `19s_Mega_1.png`      | partial/pass | real generation                                        |
+| A Mega      | 2   | `9s_Mega_2.png`       | fail         | `api-fallback-original` (short runtime)                |
+| A Mega      | 3   | `10s_Mega_3.png`      | fail         | `api-fallback-original` (short runtime)                |
+| B Bloomberg | 1–3 | `21s` / `20s` / `16s` | mixed        | successful runs still vary on underlines / thin edges  |
+| C Mine_Wine | 1–3 | `20s` / `22s` / `16s` | mixed        | crop improved vs Prompt 1 2.5; fidelity still unstable |
+
+
+
 
 #### Summary
 
-| Metric | Value |
-|--------|-------|
-| Transport | Still hit AI Studio location failures → silent original fallback on short runs |
-| Decision | Keep Gemini 3.1; pin Vertex Global + reviewable candidates |
-| Next change | Prompt 2 + Vertex provider pin (Session B) |
+
+| Metric      | Value                                                                          |
+| ----------- | ------------------------------------------------------------------------------ |
+| Transport   | Still hit AI Studio location failures → silent original fallback on short runs |
+| Decision    | Keep Gemini 3.1; pin Vertex Global + reviewable candidates                     |
+| Next change | Prompt 2 + Vertex provider pin (Session B)                                     |
+
+
+
 
 ### Session B — Vertex Global + review candidates
 
-| Setting | Value |
-|---------|-------|
-| Date | 2026-07-30 |
-| Model | `google/gemini-3.1-flash-image` |
-| Provider | `google-vertex/global` only; fallback disabled |
-| Output dir | `tests/prompt/prompt_2_vertex_review_retry/` |
-| Enhancement enabled | true |
+
+| Setting             | Value                                          |
+| ------------------- | ---------------------------------------------- |
+| Date                | 2026-07-30                                     |
+| Model               | `google/gemini-3.1-flash-image`                |
+| Provider            | `google-vertex/global` only; fallback disabled |
+| Output dir          | `tests/prompt/prompt_2_vertex_review_retry/`   |
+| Enhancement enabled | true                                           |
+
+
+
 
 #### Results
 
-| Metric | Value |
-|--------|-------|
-| Runs | **9/9 AI candidates** (no AI Studio location failures, no original-image fallbacks) |
-| Runtime | 14–17 seconds |
-| Edges | Surroundings removed; tight crop. Minor perimeter / straight-bottom-edge leftovers remain |
-| Fidelity | Underlines and some character rendering still vary; paper tone can warm slightly |
-| Decision | Keep Gemini 3.1 for cost/latency; **do not auto-replace original** — Confirm / Retry / Use original |
-| Next change | Prompt 3 — ban color shift / force “pixel lock” wording |
+
+| Metric      | Value                                                                                               |
+| ----------- | --------------------------------------------------------------------------------------------------- |
+| Runs        | **9/9 AI candidates** (no AI Studio location failures, no original-image fallbacks)                 |
+| Runtime     | 14–17 seconds                                                                                       |
+| Edges       | Surroundings removed; tight crop. Minor perimeter / straight-bottom-edge leftovers remain           |
+| Fidelity    | Underlines and some character rendering still vary; paper tone can warm slightly                    |
+| Decision    | Keep Gemini 3.1 for cost/latency; **do not auto-replace original** — Confirm / Retry / Use original |
+| Next change | Prompt 3 — ban color shift / force “pixel lock” wording                                             |
+
 
 ---
+
+
 
 ## Prompt 3 — mathematical warping / pixel lock
 
@@ -351,39 +433,51 @@ Return exclusively the cropped and perspective-warped card image. Do not output 
 
 ### Session A — Gemini 3.1 Flash Image
 
-| Setting | Value |
-|---------|-------|
-| Date | 2026-07-30 |
-| Model | `google/gemini-3.1-flash-image` |
-| Provider | `google-vertex/global` (expected) |
-| Output dir | `tests/prompt/prompt_3_gemini_3.1_flash/` |
-| Enhancement enabled | true |
+
+| Setting             | Value                                     |
+| ------------------- | ----------------------------------------- |
+| Date                | 2026-07-30                                |
+| Model               | `google/gemini-3.1-flash-image`           |
+| Provider            | `google-vertex/global` (expected)         |
+| Output dir          | `tests/prompt/prompt_3_gemini_3.1_flash/` |
+| Enhancement enabled | true                                      |
+
+
+
 
 #### Results
 
-| Input | Run | Output path | Edges | Ratio | Persp. | Text | Light | Total | Overall | Tags / notes |
-|-------|-----|-------------|-------|-------|--------|------|-------|-------|---------|--------------|
-| A Mega | 1 | `20s_Mega_1.png` | 1 | 2 | 2 | 1 | 0 | 6/10 | fail | crop OK-ish; **`paper-warmed`** cream/beige vs input white; bottom edge remnant; underlines |
-| A Mega | 2 | `18s_Mega_2.png` | | 2 | | | | /10 | | inspect for color shift |
-| A Mega | 3 | `23s_Mega_3.png` | | 2 | | | | /10 | | inspect for color shift |
-| B Bloomberg | 1 | `25s_Bloomberg_1.png` | | 2 | | | | /10 | | |
-| B Bloomberg | 2 | `17s_Bloomberg_2.png` | | 2 | | | | /10 | | |
-| B Bloomberg | 3 | `14s_Bloomberg_3.png` | | 2 | | | | /10 | | |
-| C Mine_Wine | 1 | `24s_Mine_Wine_1.png` | | 2 | | | | /10 | | |
-| C Mine_Wine | 2 | `18s_Mine_Wine_2.png` | 1 | 2 | 2 | 2 | 1 | 8/10 | pass | desk gone; thin perimeter remains; paper closer to neutral |
-| C Mine_Wine | 3 | `18s_Mine_Wine_3.png` | 1 | 2 | 2 | 2 | 1 | 8/10 | pass | same; straight bottom edge still treated as border |
+
+| Input       | Run | Output path           | Edges | Ratio | Persp. | Text | Light | Total | Overall | Tags / notes                                                                            |
+| ----------- | --- | --------------------- | ----- | ----- | ------ | ---- | ----- | ----- | ------- | --------------------------------------------------------------------------------------- |
+| A Mega      | 1   | `20s_Mega_1.png`      | 1     | 2     | 2      | 1    | 0     | 6/10  | fail    | crop OK-ish; `paper-warmed` cream/beige vs input white; bottom edge remnant; underlines |
+| A Mega      | 2   | `18s_Mega_2.png`      |       | 2     |        |      |       | /10   |         | inspect for color shift                                                                 |
+| A Mega      | 3   | `23s_Mega_3.png`      |       | 2     |        |      |       | /10   |         | inspect for color shift                                                                 |
+| B Bloomberg | 1   | `25s_Bloomberg_1.png` |       | 2     |        |      |       | /10   |         |                                                                                         |
+| B Bloomberg | 2   | `17s_Bloomberg_2.png` |       | 2     |        |      |       | /10   |         |                                                                                         |
+| B Bloomberg | 3   | `14s_Bloomberg_3.png` |       | 2     |        |      |       | /10   |         |                                                                                         |
+| C Mine_Wine | 1   | `24s_Mine_Wine_1.png` |       | 2     |        |      |       | /10   |         |                                                                                         |
+| C Mine_Wine | 2   | `18s_Mine_Wine_2.png` | 1     | 2     | 2      | 2    | 1     | 8/10  | pass    | desk gone; thin perimeter remains; paper closer to neutral                              |
+| C Mine_Wine | 3   | `18s_Mine_Wine_3.png` | 1     | 2     | 2      | 2    | 1     | 8/10  | pass    | same; straight bottom edge still treated as border                                      |
+
+
+
 
 #### Summary
 
-| Metric | Value |
-|--------|-------|
-| Runs scored | 3/9 spot-checked (+ folder has full 9 files) |
-| Pass / partial / fail | mixed — crop often OK; **color lock unreliable** |
-| Stable on all 3 runs? | **No** — Mega still warms paper; bottom straight edge sometimes kept |
-| Decision | Prompt wording alone cannot guarantee RGB fidelity on a generative image model |
-| Next change | Prompt 4 — add explicit negative color constraints (`#FFFFFF`, ban beige/cream) |
+
+| Metric                | Value                                                                           |
+| --------------------- | ------------------------------------------------------------------------------- |
+| Runs scored           | 3/9 spot-checked (+ folder has full 9 files)                                    |
+| Pass / partial / fail | mixed — crop often OK; **color lock unreliable**                                |
+| Stable on all 3 runs? | **No** — Mega still warms paper; bottom straight edge sometimes kept            |
+| Decision              | Prompt wording alone cannot guarantee RGB fidelity on a generative image model  |
+| Next change           | Prompt 4 — add explicit negative color constraints (`#FFFFFF`, ban beige/cream) |
+
 
 ---
+
+
 
 ## Prompt 4 — geometric crop + negative color constraints
 
@@ -417,40 +511,130 @@ CRITICAL NEGATIVE CONSTRAINTS (DO NOT INCLUDE IN OUTPUT):
 
 ### Session A — Gemini 3.1 Flash Image
 
-| Setting | Value |
-|---------|-------|
-| Date | 2026-07-31 |
-| Model | `google/gemini-3.1-flash-image` |
-| Provider | `google-vertex/global` (expected) |
-| Output dir | `tests/prompt/prompt_4_gemini_3.1_flash/` |
-| Enhancement enabled | true |
+
+| Setting             | Value                                     |
+| ------------------- | ----------------------------------------- |
+| Date                | 2026-07-31                                |
+| Model               | `google/gemini-3.1-flash-image`           |
+| Provider            | `google-vertex/global` (expected)         |
+| Output dir          | `tests/prompt/prompt_4_gemini_3.1_flash/` |
+| Enhancement enabled | true                                      |
+
+
+
 
 #### Results
 
-| Input | Run | Output path | Edges | Ratio | Persp. | Text | Light | Total | Overall | Tags / notes |
-|-------|-----|-------------|-------|-------|--------|------|-------|-------|---------|--------------|
-| A Mega | 1 | `21s_Mega_1.png` | 2 | 2 | 2 | 1 | 2 | 9/10 | pass | white paper much closer to input; underlines still appear |
-| A Mega | 2 | `21s_Mega_2.png` | 1 | 2 | 2 | 1 | 2 | 8/10 | pass | thin bottom scan edge left; underlines |
-| A Mega | 3 | `22s_Mega_3.png` | 2 | 2 | 2 | 1 | 2 | 9/10 | pass | clean white; design gold divider kept; underlines |
-| B Bloomberg | 1 | `15s_Bloomberg_1.png` | 1 | 2 | 2 | 2 | 2 | 9/10 | pass | tight crop; faint bottom edge remnant |
-| B Bloomberg | 2 | `14s_Bloomberg_2.png` | 1 | 2 | 2 | 1 | 1 | 7/10 | partial | paper slightly warm/off-white; `underline-artifacts` |
-| B Bloomberg | 3 | `17s_Bloomberg_3.png` | 1 | 2 | 2 | 2 | 2 | 9/10 | pass | neutral paper; thin bottom edge |
-| C Mine_Wine | 1 | `19s_Mine_Wine_1.png` | 2 | 2 | 2 | 2 | 1 | 9/10 | pass | desk gone; red bars preserved; mild off-white grain |
-| C Mine_Wine | 2 | `18s_Mine_Wine_2.png` | 2 | 2 | 2 | 2 | 1 | 9/10 | pass | clean crop; underlines on contact lines |
-| C Mine_Wine | 3 | `19s_Mine_Wine_3.png` | 1 | 2 | 2 | 2 | 1 | 8/10 | pass | thin perimeter / off-white grain remains |
+
+| Input       | Run | Output path           | Edges | Ratio | Persp. | Text | Light | Total | Overall | Tags / notes                                              |
+| ----------- | --- | --------------------- | ----- | ----- | ------ | ---- | ----- | ----- | ------- | --------------------------------------------------------- |
+| A Mega      | 1   | `21s_Mega_1.png`      | 2     | 2     | 2      | 1    | 2     | 9/10  | pass    | white paper much closer to input; underlines still appear |
+| A Mega      | 2   | `21s_Mega_2.png`      | 1     | 2     | 2      | 1    | 2     | 8/10  | pass    | thin bottom scan edge left; underlines                    |
+| A Mega      | 3   | `22s_Mega_3.png`      | 2     | 2     | 2      | 1    | 2     | 9/10  | pass    | clean white; design gold divider kept; underlines         |
+| B Bloomberg | 1   | `15s_Bloomberg_1.png` | 1     | 2     | 2      | 2    | 2     | 9/10  | pass    | tight crop; faint bottom edge remnant                     |
+| B Bloomberg | 2   | `14s_Bloomberg_2.png` | 1     | 2     | 2      | 1    | 1     | 7/10  | partial | paper slightly warm/off-white; `underline-artifacts`      |
+| B Bloomberg | 3   | `17s_Bloomberg_3.png` | 1     | 2     | 2      | 2    | 2     | 9/10  | pass    | neutral paper; thin bottom edge                           |
+| C Mine_Wine | 1   | `19s_Mine_Wine_1.png` | 2     | 2     | 2      | 2    | 1     | 9/10  | pass    | desk gone; red bars preserved; mild off-white grain       |
+| C Mine_Wine | 2   | `18s_Mine_Wine_2.png` | 2     | 2     | 2      | 2    | 1     | 9/10  | pass    | clean crop; underlines on contact lines                   |
+| C Mine_Wine | 3   | `19s_Mine_Wine_3.png` | 1     | 2     | 2      | 2    | 1     | 8/10  | pass    | thin perimeter / off-white grain remains                  |
+
+
+
 
 #### Summary
 
-| Metric | Value |
-|--------|-------|
-| Runs scored | 9/9 |
-| Pass / partial / fail | 7 / 2 / 0 |
-| Average total | **~8.6/10** |
-| Stable on all 3 runs? | **Mostly** — color better than Prompt 3; Mega no longer strongly beige |
-| Decision | Best prompt so far for white preservation + crop; still generative (underlines / thin edges vary) |
-| Next change | Keep review UI; if pixel-perfect white/text required → hybrid LLM corners + OpenCV warp |
+
+| Metric                | Value                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------- |
+| Runs scored           | 9/9                                                                                               |
+| Pass / partial / fail | 7 / 2 / 0                                                                                         |
+| Average total         | **~8.6/10**                                                                                       |
+| Stable on all 3 runs? | **Mostly** — color better than Prompt 3; Mega no longer strongly beige                            |
+| Decision              | Best prompt so far for white preservation + crop; still generative (underlines / thin edges vary) |
+| Next change           | Keep review UI; if pixel-perfect white/text required → hybrid LLM corners + OpenCV warp           |
+
 
 ---
+
+
+
+## Prompt 5 — same prompt as Prompt 4 + border/frame ban (Flux.2 Pro)
+
+**Goal:** Hold Prompt 4's crop/color instructions constant; add `border`, `frame`, `outline`, `vignette`, `drop shadow` to the negative-prompt list to stop the black border seen on the first Flux.2 Pro smoke test; also swap model from Gemini 3.1 to Flux.2 Pro.
+
+**Implementation source:** current `app/services/image_enhancement_service.py` `ENHANCEMENT_PROMPT`.
+
+**Prompt text:**
+
+```text
+Task: Complete strict geometric image cropping and perspective translation on the provided image. Do not generate or paint new artistic textures.
+
+GEOMETRIC BOUNDARIES:
+- Detect the 4 outermost physical edges of the card material.
+- Crop edge-to-edge so the card touches all four output borders. 
+- Delete 100% of pixels outside the card boundary (remove tables, scanner edges, hands, shadows).
+- Correct all tilt and keystone distortion to force a flat, top-down rectangular plane.
+- Maintain original horizontal landscape proportions. Never output a square image.
+
+PIXEL INVARIANCE (COLOR PROTECTION MATRIX):
+- Treat the RGB pixel values inside the card as mathematical constants. 
+- Do not add lighting filters, contrast changes, denoising, or style enhancements.
+- The output background color must map 1:1 identically to the input image background. If the input background is white, the output must remain pure #FFFFFF white. Do not warm the tint or add cream, off-white, or beige hues.
+- Do not reconstruct, sharpen, or repaint logos, lines, or characters.
+
+CRITICAL NEGATIVE CONSTRAINTS (DO NOT INCLUDE IN OUTPUT):
+[NEGATIVE_PROMPT: beige, cream, off-white, warm tones, studio lighting, yellow tint, gradient background, paper texture, ambient occlusion shadows, background bleeding, border, frame, outline, vignette, drop shadow]
+```
+
+**Hypothesis:** Adding `border`/`frame`/`outline` to the negative list will eliminate the added-border defect without introducing new regressions.
+
+### Session A — Flux.2 Pro, full 3× per input
+
+
+| Setting             | Value                              |
+| ------------------- | ---------------------------------- |
+| Date                | 2026-09-07                         |
+| Model               | `black-forest-labs/flux.2-pro`     |
+| Output dir          | `tests/prompt/prompt_5_flux2_pro/` |
+| Enhancement enabled | true                               |
+
+
+
+
+#### Results
+
+
+| Input       | Run | Output path           | Edges | Ratio | Persp. | Text | Light | Total | Overall | Tags / notes                                                                                                      |
+| ----------- | --- | --------------------- | ----- | ----- | ------ | ---- | ----- | ----- | ------- | ----------------------------------------------------------------------------------------------------------------- |
+| A Mega      | 1   | `24s_Mega_1.png`      | 2     | 2     | 2      | 2    | 2     | 10/10 | pass    | Clean; no border this time.                                                                                       |
+| A Mega      | 2   | `22s_Mega_2.png`      | 2     | 2     | 2      | 2    | 2     | 10/10 | pass    | Clean; no border.                                                                                                 |
+| A Mega      | 3   | `32s_Mega_3.png`      | 2     | 2     | 2      | 2    | 2     | 10/10 | pass    | Clean; no border.                                                                                                 |
+| B Bloomberg | 1   | `22s_Bloomberg_1.png` | 2     | 2     | 2      | 1    | 2     | 9/10  | pass    | No border. `underline-artifacts` — second phone number's underline renders with a different style than the first. |
+| B Bloomberg | 2   | `23s_Bloomberg_2.png` | 2     | 2     | 2      | 1    | 2     | 9/10  | pass    | Same `underline-artifacts` as run 1.                                                                              |
+| B Bloomberg | 3   | `23s_Bloomberg_3.png` | 2     | 2     | 2      | 1    | 2     | 9/10  | pass    | Same `underline-artifacts` again — consistent across all 3 runs.                                                  |
+| C Mine_Wine | 1   | `29s_Mine_Wine_1.png` | 2     | 2     | 2      | 0    | 2     | 8/10  | pass*   | `text-altered` — Chinese company name corrupted: "薈盈**香**港有限公司" became "薈盈**港**港有限公司" (character substitution).   |
+| C Mine_Wine | 2   | `28s_Mine_Wine_2.png` | 2     | 2     | 2      | 2    | 2     | 10/10 | pass    | Clean; no text errors this run.                                                                                   |
+| C Mine_Wine | 3   | `45s_Mine_Wine_3.png` | 2     | 2     | 2      | 0    | 2     | 8/10  | pass*   | `text-altered` — "Mobile:" misspelled as "Mobiie:" in the rendered output.                                        |
+
+
+ Numeric score clears the pass threshold per the rubric's mechanical rule (≥8, no 0 on edges/ratio), but a `text-altered` result should be treated as a hard fail in practice — it silently corrupts real contact/business data.
+
+#### Summary
+
+
+| Metric                | Value                                                                                                                                                                                                                                                                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Runs scored           | 9/9                                                                                                                                                                                                                                                                                                                      |
+| Pass / partial / fail | 9 / 0 / 0 (mechanically) — but 2/9 contain `text-altered`                                                                                                                                                                                                                                                                |
+| Average total         | ~9.2/10                                                                                                                                                                                                                                                                                                                  |
+| Stable on all 3 runs? | **Border defect: yes, fixed (0/9).** **Text fidelity: no** — Mine_Wine (the hardest/most-tilted input, also the slowest runs at 28–45s) corrupted text in 2/3 runs; Mega and Bloomberg had zero text errors across all 6 runs.                                                                                           |
+| Decision              | Border fix confirmed working. Best crop/perspective/color of any session so far, but not production-safe as-is: silent text corruption on hard inputs is worse than a visible border, since a user reviewing the enhanced image may not notice a single wrong character.                                                 |
+| Next change           | Investigate whether text corruption correlates with harder perspective correction (longer runtime) — consider a stronger "do not alter any character, digit, or word; if unsure, copy the pixels exactly" instruction, and/or add a post-enhancement diff/verification step rather than relying on prompt wording alone. |
+
+
+---
+
+
 
 ## Prompt template
 
@@ -470,25 +654,32 @@ Copy this block for each prompt version.
 
 #### Results
 
-| Input | Run | Output path | Edges | Ratio | Persp. | Text | Light | Total | Overall | Tags / notes |
-|-------|-----|-------------|-------|-------|--------|------|-------|-------|---------|--------------|
-| A Mega | 1 | | | | | | | /10 | | |
-| A Mega | 2 | | | | | | | /10 | | |
-| A Mega | 3 | | | | | | | /10 | | |
-| B Bloomberg | 1 | | | | | | | /10 | | |
-| B Bloomberg | 2 | | | | | | | /10 | | |
-| B Bloomberg | 3 | | | | | | | /10 | | |
-| C Mine_Wine | 1 | | | | | | | /10 | | |
-| C Mine_Wine | 2 | | | | | | | /10 | | |
-| C Mine_Wine | 3 | | | | | | | /10 | | |
+
+| Input       | Run | Output path | Edges | Ratio | Persp. | Text | Light | Total | Overall | Tags / notes |
+| ----------- | --- | ----------- | ----- | ----- | ------ | ---- | ----- | ----- | ------- | ------------ |
+| A Mega      | 1   |             |       |       |        |      |       | /10   |         |              |
+| A Mega      | 2   |             |       |       |        |      |       | /10   |         |              |
+| A Mega      | 3   |             |       |       |        |      |       | /10   |         |              |
+| B Bloomberg | 1   |             |       |       |        |      |       | /10   |         |              |
+| B Bloomberg | 2   |             |       |       |        |      |       | /10   |         |              |
+| B Bloomberg | 3   |             |       |       |        |      |       | /10   |         |              |
+| C Mine_Wine | 1   |             |       |       |        |      |       | /10   |         |              |
+| C Mine_Wine | 2   |             |       |       |        |      |       | /10   |         |              |
+| C Mine_Wine | 3   |             |       |       |        |      |       | /10   |         |              |
+
+
+
 
 #### Summary
 
-| Metric | Value |
-|--------|-------|
-| Runs scored | /9 |
-| Pass / partial / fail | / / |
-| Average total | /10 |
-| Stable on all 3 runs? | |
-| Decision | |
-| Next change | |
+
+| Metric                | Value |
+| --------------------- | ----- |
+| Runs scored           | /9    |
+| Pass / partial / fail | / /   |
+| Average total         | /10   |
+| Stable on all 3 runs? |       |
+| Decision              |       |
+| Next change           |       |
+
+
