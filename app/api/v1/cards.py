@@ -35,6 +35,7 @@ from app.services.share_link_service import (
     ShareLinkNotFoundError,
     ShareLinkService,
 )
+from app.utils.multipart_files import optional_upload_file
 
 logger = logging.getLogger(__name__)
 
@@ -108,9 +109,9 @@ async def import_card_from_share(
 )
 async def process_card(
     raw_ocr_text: str = Form(..., min_length=1, max_length=OCR_TEXT_MAX_LENGTH),
-    scan_image: UploadFile | None = File(None),
+    scan_image: UploadFile | str | None = File(None),
     scan_image_base64: str | None = Form(None),
-    scan_image_back: UploadFile | None = File(None),
+    scan_image_back: UploadFile | str | None = File(None),
     scan_image_back_base64: str | None = Form(None),
     owner_user_id: str = Depends(enforce_llm_rate_limit),
     card_service: CardService = Depends(get_card_service),
@@ -132,6 +133,8 @@ async def process_card(
     scan_image_content_type = "image/jpeg"
     scan_image_back_bytes: bytes | None = None
     scan_image_back_content_type = "image/jpeg"
+    scan_image = optional_upload_file(scan_image)
+    scan_image_back = optional_upload_file(scan_image_back)
 
     if scan_image_base64:
         payload = scan_image_base64.strip()
@@ -237,9 +240,9 @@ async def save_offline_draft(
     core_fields_json: str = Form(...),
     custom_fields_json: str = Form("{}"),
     edited_fields_json: str = Form("[]"),
-    scan_image: UploadFile | None = File(None),
+    scan_image: UploadFile | str | None = File(None),
     scan_image_base64: str | None = Form(None),
-    scan_image_back: UploadFile | None = File(None),
+    scan_image_back: UploadFile | str | None = File(None),
     scan_image_back_base64: str | None = Form(None),
     owner_user_id: str = Depends(get_current_user_id),
     card_service: CardService = Depends(get_card_service),
@@ -271,6 +274,8 @@ async def save_offline_draft(
     scan_image_content_type = "image/jpeg"
     scan_image_back_bytes: bytes | None = None
     scan_image_back_content_type = "image/jpeg"
+    scan_image = optional_upload_file(scan_image)
+    scan_image_back = optional_upload_file(scan_image_back)
 
     if scan_image_base64:
         payload = scan_image_base64.strip()
@@ -470,6 +475,81 @@ async def delete_card(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete captured card.",
         ) from exc
+
+
+@router.post(
+    "/{card_id}/scan-image-enhancement/retry",
+    response_model=CapturedCardResponse,
+    summary="Generate a new AI-cleaned scan preview",
+)
+async def retry_card_scan_image_enhancement(
+    card_id: str,
+    owner_user_id: str = Depends(enforce_llm_rate_limit),
+    card_service: CardService = Depends(get_card_service),
+) -> CapturedCardResponse:
+    try:
+        return await card_service.retry_scan_image_enhancement(card_id, owner_user_id)
+    except CardNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Card not found.") from exc
+    except CardPersistenceError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{card_id}/scan-image-enhancement/confirm",
+    response_model=CapturedCardResponse,
+    summary="Use the staged AI-cleaned scan",
+)
+async def confirm_card_scan_image_enhancement(
+    card_id: str,
+    owner_user_id: str = Depends(get_current_user_id),
+    card_service: CardService = Depends(get_card_service),
+) -> CapturedCardResponse:
+    try:
+        return await card_service.confirm_scan_image_enhancement(card_id, owner_user_id)
+    except CardNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Card not found.") from exc
+    except CardPersistenceError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{card_id}/scan-image-enhancement/discard",
+    response_model=CapturedCardResponse,
+    summary="Discard the AI-cleaned preview and use the original scan",
+)
+async def discard_card_scan_image_enhancement(
+    card_id: str,
+    owner_user_id: str = Depends(get_current_user_id),
+    card_service: CardService = Depends(get_card_service),
+) -> CapturedCardResponse:
+    try:
+        return await card_service.discard_scan_image_enhancement(card_id, owner_user_id)
+    except CardNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Card not found.") from exc
+    except CardPersistenceError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{card_id}/scan-image/{face}/pending",
+    summary="Download a staged AI-cleaned scan preview",
+)
+async def get_card_pending_scan_image(
+    card_id: str,
+    face: PhotoFace,
+    owner_user_id: str = Depends(get_current_user_id),
+    card_service: CardService = Depends(get_card_service),
+) -> Response:
+    try:
+        image_bytes, content_type = await card_service.get_pending_scan_image(
+            card_id,
+            owner_user_id,
+            face=face,
+        )
+    except ScanImageNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return Response(content=image_bytes, media_type=content_type)
 
 
 @router.get(

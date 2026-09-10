@@ -8,10 +8,9 @@ from app.api.v1 import api_v1_router
 from app.core.config import get_settings
 from app.core.firebase import init_firebase
 from app.db.mongodb import close_motor_client, get_motor_client
+from app.web.privacy import router as privacy_router
 from app.web.routes import router as share_web_router
-from app.core.config import get_settings
-from app.core.firebase import init_firebase
-from app.db.mongodb import close_motor_client, get_motor_client
+from app.web.terms import router as terms_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -34,6 +33,9 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version="1.0.0",
         lifespan=lifespan,
+        docs_url="/docs" if settings.enable_docs else None,
+        redoc_url="/redoc" if settings.enable_docs else None,
+        openapi_url="/openapi.json" if settings.enable_docs else None,
     )
 
     app.add_middleware(
@@ -44,8 +46,20 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.get("/health", include_in_schema=False)
+    async def health_check() -> dict[str, str]:
+        """Always-on liveness endpoint for the mobile app's connectivity check.
+
+        Unlike /docs, this is never gated behind ENABLE_DOCS / DEPLOY_ENV —
+        it carries no documentation content, just a plain 200 so clients can
+        tell the API is reachable before attempting a real request.
+        """
+        return {"status": "ok"}
+
     app.include_router(api_v1_router, prefix=settings.api_v1_prefix)
     app.include_router(share_web_router)
+    app.include_router(privacy_router)
+    app.include_router(terms_router)
 
     return app
 

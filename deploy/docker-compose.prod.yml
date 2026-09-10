@@ -16,13 +16,24 @@ services:
     network_mode: host
     command: ["uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8002"]
     environment:
+      # DEPLOY_ENV=prod does NOT hide /docs yet. The shipped app still probes /docs
+      # for connectivity; hiding it makes the API look offline. After the app uses
+      # GET /health, restore Settings.enable_docs to: deploy_env == "dev".
+      DEPLOY_ENV: ${DEPLOY_ENV:-prod}
       MONGO_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@127.0.0.1:27017
       MONGO_DB_NAME: ${MONGO_DB_NAME:-e_business_card}
       MONGO_CARDS_COLLECTION: ${MONGO_CARDS_COLLECTION:-captured_cards}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_API_KEY_US: ${OPENROUTER_API_KEY_US:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-deepseek/deepseek-chat}
       OPENROUTER_TIMEOUT_SECONDS: ${OPENROUTER_TIMEOUT_SECONDS:-30}
       OPENROUTER_MAX_RETRIES: ${OPENROUTER_MAX_RETRIES:-2}
+      OPENROUTER_IMAGE_MODEL: ${OPENROUTER_IMAGE_MODEL:-google/gemini-3.1-flash-image}
+      OPENROUTER_IMAGE_PROVIDER: ${OPENROUTER_IMAGE_PROVIDER:-google-vertex/global}
+      OPENROUTER_IMAGE_TIMEOUT_SECONDS: ${OPENROUTER_IMAGE_TIMEOUT_SECONDS:-30}
+      OPENROUTER_IMAGE_QUALITY: ${OPENROUTER_IMAGE_QUALITY:-high}
+      OPENROUTER_IMAGE_ENHANCEMENT_ENABLED: ${OPENROUTER_IMAGE_ENHANCEMENT_ENABLED:-true}
+      OPENROUTER_IMAGE_MAX_ATTEMPTS: ${OPENROUTER_IMAGE_MAX_ATTEMPTS:-3}
       FIREBASE_CREDENTIALS_PATH: /app/secrets/firebase-service-account.json
       SHARE_PUBLIC_BASE_URL: ${SHARE_PUBLIC_BASE_URL:-https://ebc.megaannum.ai/c}
     volumes:

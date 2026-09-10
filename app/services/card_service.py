@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 from datetime import UTC, datetime
@@ -18,8 +19,10 @@ from app.core.exceptions import (
 from app.models.card import CapturedCardBase, CapturedCardDocument, CapturedCardResponse, PhotoFace, WalletDisplay
 
 from app.models.requests import CapturedCardUpdate
+from app.services.image_enhancement_service import ImageEnhancementService
 from app.services.openrouter import OpenRouterService
 from app.services.scan_image_service import ScanImageService
+from app.services.scan_image_review_service import ScanImageReviewService
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +35,17 @@ class CardService:
         collection: AsyncIOMotorCollection,
         scan_image_service: ScanImageService | None = None,
         openrouter_service: OpenRouterService | None = None,
+        image_enhancement_service: ImageEnhancementService | None = None,
     ) -> None:
         self._collection = collection
         self._scan_images = scan_image_service
         self._openrouter = openrouter_service or OpenRouterService()
+        self._image_enhancer = image_enhancement_service or ImageEnhancementService()
+        self._scan_review = (
+            ScanImageReviewService(scan_image_service, self._image_enhancer)
+            if scan_image_service is not None
+            else None
+        )
 
     async def process_and_save(
         self,
@@ -103,6 +113,10 @@ class CardService:
                             "scan_image_id": scan_image_id,
                             "scan_image_front_id": scan_image_front_id,
                             "scan_image_back_id": scan_image_back_id,
+                            "scan_image_front_original_id": scan_image_front_id,
+                            "scan_image_back_original_id": scan_image_back_id,
+                            "scan_image_enhancement_status": "processing",
+                            "scan_image_enhancement_error": None,
                             "wallet_display": wallet_display,
                             "photo_face": photo_face,
                         }
@@ -111,6 +125,7 @@ class CardService:
             except PyMongoError as exc:
                 logger.exception("Failed to link scan image to card %s", card_id)
                 raise CardPersistenceError("Failed to persist captured card") from exc
+            return await self.retry_scan_image_enhancement(card_id, owner_user_id)
 
         return self._to_response(
             {
@@ -192,6 +207,8 @@ class CardService:
                             "scan_image_id": scan_image_id,
                             "scan_image_front_id": scan_image_front_id,
                             "scan_image_back_id": scan_image_back_id,
+                            "scan_image_front_original_id": scan_image_front_id,
+                            "scan_image_back_original_id": scan_image_back_id,
                             "wallet_display": wallet_display,
                             "photo_face": photo_face,
                         }
@@ -208,6 +225,8 @@ class CardService:
                 "scan_image_id": scan_image_id,
                 "scan_image_front_id": scan_image_front_id,
                 "scan_image_back_id": scan_image_back_id,
+                "scan_image_front_original_id": scan_image_front_id,
+                "scan_image_back_original_id": scan_image_back_id,
                 "wallet_display": wallet_display,
                 "photo_face": photo_face,
             }
@@ -459,6 +478,94 @@ class CardService:
             content_type=content_type,
         )
 
+    async def _enhance_scan_pair(
+        self,
+        front_bytes: bytes,
+        front_content_type: str,
+        back_bytes: bytes | None,
+        back_content_type: str,
+    ) -> tuple[tuple[bytes, str], tuple[bytes, str] | None]:
+        front_task = self._image_enhancer.enhance_or_original(
+            front_bytes,
+            front_content_type,
+        )
+        if back_bytes is None:
+            return await front_task, None
+
+        front, back = await asyncio.gather(
+            front_task,
+            self._image_enhancer.enhance_or_original(
+                back_bytes,
+                back_content_type,
+            ),
+        )
+        return front, back
+
+    async def _enhance_stored_scan_images(
+        self,
+        *,
+        document: dict,
+        owner_user_id: str,
+        card_id: str,
+    ) -> tuple[dict[str, str], set[str]]:
+        if self._scan_images is None:
+            return {}, set()
+
+        front_image_id = CardService._scan_front_image_id(document)
+        back_image_id = CardService._scan_back_image_id(document)
+
+        async def enhance_face(
+            image_id: str | None,
+            face: PhotoFace,
+        ) -> tuple[PhotoFace, str, str] | None:
+            if not image_id:
+                return None
+            try:
+                image_bytes, content_type = await self._scan_images.read(image_id)
+                enhanced_bytes, enhanced_content_type, was_enhanced = (
+                    await self._image_enhancer.enhance_or_original_with_status(
+                        image_bytes,
+                        content_type,
+                    )
+                )
+                if not was_enhanced:
+                    return None
+                new_image_id = await self._scan_images.save(
+                    owner_user_id=owner_user_id,
+                    card_id=card_id,
+                    data=enhanced_bytes,
+                    content_type=enhanced_content_type,
+                )
+                return face, new_image_id, image_id
+            except CardPersistenceError as exc:
+                logger.warning(
+                    "Failed to enhance stored %s scan for card %s: %s",
+                    face,
+                    card_id,
+                    exc,
+                )
+                return None
+
+        results = await asyncio.gather(
+            enhance_face(front_image_id, "front"),
+            enhance_face(back_image_id, "back"),
+        )
+
+        updates: dict[str, str] = {}
+        replaced_ids: set[str] = set()
+        for result in results:
+            if result is None:
+                continue
+            face, new_image_id, old_image_id = result
+            replaced_ids.add(old_image_id)
+            if face == "front":
+                updates["scan_image_id"] = new_image_id
+                updates["scan_image_front_id"] = new_image_id
+            else:
+                updates["scan_image_back_id"] = new_image_id
+
+        return updates, replaced_ids
+
     async def list_for_user(self, owner_user_id: str) -> list[CapturedCardResponse]:
         try:
             cursor = self._collection.find({"owner_user_id": owner_user_id}).sort(
@@ -582,6 +689,129 @@ class CardService:
         except CardPersistenceError as exc:
             raise ScanImageNotFoundError("Scan image not found") from exc
 
+    async def get_pending_scan_image(
+        self,
+        card_id: str,
+        owner_user_id: str,
+        face: PhotoFace = "front",
+    ) -> tuple[bytes, str]:
+        document = await self._get_owned_card_document(card_id, owner_user_id)
+        pending_id = document.get(f"scan_image_{face}_pending_id")
+        if not pending_id or self._scan_images is None:
+            raise ScanImageNotFoundError("AI scan preview not found")
+        try:
+            return await self._scan_images.read(pending_id)
+        except CardPersistenceError as exc:
+            raise ScanImageNotFoundError("AI scan preview not found") from exc
+
+    async def retry_scan_image_enhancement(
+        self,
+        card_id: str,
+        owner_user_id: str,
+    ) -> CapturedCardResponse:
+        document = await self._get_owned_card_document(card_id, owner_user_id)
+        if self._scan_review is None:
+            raise CardPersistenceError("Scan image storage is not configured")
+        try:
+            await self._collection.update_one(
+                {"_id": document["_id"]},
+                {
+                    "$set": {
+                        "scan_image_enhancement_status": "processing",
+                        "scan_image_enhancement_error": None,
+                    }
+                },
+            )
+            result = await self._scan_review.generate_preview(
+                document=document,
+                owner_user_id=owner_user_id,
+                card_id=card_id,
+            )
+            await self._collection.update_one(
+                {"_id": document["_id"]},
+                {"$set": result.updates},
+            )
+            await self._scan_review.delete_files(result.replaced_pending_ids)
+        except PyMongoError as exc:
+            raise CardPersistenceError("Failed to persist AI scan preview") from exc
+        updated = await self._get_owned_card_document(card_id, owner_user_id)
+        return self._to_response(updated)
+
+    async def confirm_scan_image_enhancement(
+        self,
+        card_id: str,
+        owner_user_id: str,
+    ) -> CapturedCardResponse:
+        document = await self._get_owned_card_document(card_id, owner_user_id)
+        front_pending = document.get("scan_image_front_pending_id")
+        back_pending = document.get("scan_image_back_pending_id")
+        if not front_pending and not back_pending:
+            raise CardPersistenceError("No AI scan preview is available")
+
+        updates: dict = {
+            "scan_image_front_pending_id": None,
+            "scan_image_back_pending_id": None,
+            "scan_image_enhancement_status": "applied",
+            "scan_image_enhancement_error": None,
+        }
+        replaced_ids: list[str] = []
+        if front_pending:
+            old_front = CardService._scan_front_image_id(document)
+            updates["scan_image_id"] = front_pending
+            updates["scan_image_front_id"] = front_pending
+            if old_front and old_front != document.get("scan_image_front_original_id"):
+                replaced_ids.append(old_front)
+        if back_pending:
+            old_back = CardService._scan_back_image_id(document)
+            updates["scan_image_back_id"] = back_pending
+            if old_back and old_back != document.get("scan_image_back_original_id"):
+                replaced_ids.append(old_back)
+
+        try:
+            await self._collection.update_one(
+                {"_id": document["_id"]},
+                {"$set": updates},
+            )
+        except PyMongoError as exc:
+            raise CardPersistenceError("Failed to confirm AI scan preview") from exc
+        if self._scan_review is not None:
+            await self._scan_review.delete_files(replaced_ids)
+        updated = await self._get_owned_card_document(card_id, owner_user_id)
+        return self._to_response(updated)
+
+    async def discard_scan_image_enhancement(
+        self,
+        card_id: str,
+        owner_user_id: str,
+    ) -> CapturedCardResponse:
+        document = await self._get_owned_card_document(card_id, owner_user_id)
+        pending_ids = [
+            image_id
+            for image_id in (
+                document.get("scan_image_front_pending_id"),
+                document.get("scan_image_back_pending_id"),
+            )
+            if image_id
+        ]
+        try:
+            await self._collection.update_one(
+                {"_id": document["_id"]},
+                {
+                    "$set": {
+                        "scan_image_front_pending_id": None,
+                        "scan_image_back_pending_id": None,
+                        "scan_image_enhancement_status": "discarded",
+                        "scan_image_enhancement_error": None,
+                    }
+                },
+            )
+        except PyMongoError as exc:
+            raise CardPersistenceError("Failed to discard AI scan preview") from exc
+        if self._scan_review is not None:
+            await self._scan_review.delete_files(pending_ids)
+        updated = await self._get_owned_card_document(card_id, owner_user_id)
+        return self._to_response(updated)
+
     async def delete(self, card_id: str, owner_user_id: str) -> None:
         document = await self._get_owned_card_document(card_id, owner_user_id)
 
@@ -591,6 +821,10 @@ class CardService:
                 document.get("scan_image_id"),
                 document.get("scan_image_front_id"),
                 document.get("scan_image_back_id"),
+                document.get("scan_image_front_original_id"),
+                document.get("scan_image_back_original_id"),
+                document.get("scan_image_front_pending_id"),
+                document.get("scan_image_back_pending_id"),
             )
             if image_id
         }
@@ -639,7 +873,7 @@ class CardService:
     def _scan_image_url(card_id: str, scan_image_id: str | None) -> str | None:
         if not scan_image_id:
             return None
-        return f"/api/v1/cards/{card_id}/scan-image"
+        return f"/api/v1/cards/{card_id}/scan-image?v={scan_image_id}"
 
     @staticmethod
     def _scan_front_image_id(document: dict) -> str | None:
@@ -653,13 +887,19 @@ class CardService:
     def _scan_front_image_url(card_id: str, scan_image_front_id: str | None) -> str | None:
         if not scan_image_front_id:
             return None
-        return f"/api/v1/cards/{card_id}/scan-image/front"
+        return f"/api/v1/cards/{card_id}/scan-image/front?v={scan_image_front_id}"
 
     @staticmethod
     def _scan_back_image_url(card_id: str, scan_image_back_id: str | None) -> str | None:
         if not scan_image_back_id:
             return None
-        return f"/api/v1/cards/{card_id}/scan-image/back"
+        return f"/api/v1/cards/{card_id}/scan-image/back?v={scan_image_back_id}"
+
+    @staticmethod
+    def _pending_image_url(card_id: str, face: PhotoFace, pending_id: str | None) -> str | None:
+        if not pending_id:
+            return None
+        return f"/api/v1/cards/{card_id}/scan-image/{face}/pending?v={pending_id}"
 
     @staticmethod
     def _resolve_wallet_display(document: dict, scan_image_id: str | None) -> WalletDisplay:
@@ -785,6 +1025,18 @@ class CardService:
             scan_image_url=CardService._scan_image_url(card_id, scan_image_front_id),
             scan_image_front_url=CardService._scan_front_image_url(card_id, scan_image_front_id),
             scan_image_back_url=CardService._scan_back_image_url(card_id, scan_image_back_id),
+            scan_image_front_pending_url=CardService._pending_image_url(
+                card_id,
+                "front",
+                document.get("scan_image_front_pending_id"),
+            ),
+            scan_image_back_pending_url=CardService._pending_image_url(
+                card_id,
+                "back",
+                document.get("scan_image_back_pending_id"),
+            ),
+            scan_image_enhancement_status=document.get("scan_image_enhancement_status", "none"),
+            scan_image_enhancement_error=document.get("scan_image_enhancement_error"),
             wallet_display=CardService._resolve_wallet_display(document, scan_image_front_id),
             photo_face=CardService._resolve_photo_face(document),
             parse_status=document.get("parse_status", "parsed"),

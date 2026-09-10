@@ -130,6 +130,63 @@ paths:
           description: Missing or invalid Firebase ID token
         "500":
           description: Database delete failed
+  /api/v1/cards/{card_id}/scan-image-enhancement/retry:
+    post:
+      summary: Generate a new AI-cleaned scan preview
+      operationId: retryCardScanImageEnhancement
+      tags: [cards]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: card_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Card with a staged AI preview or failed review status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CapturedCardResponse" }
+  /api/v1/cards/{card_id}/scan-image-enhancement/confirm:
+    post:
+      summary: Use the staged AI-cleaned scan
+      operationId: confirmCardScanImageEnhancement
+      tags: [cards]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: card_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Card using the approved AI scan
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CapturedCardResponse" }
+  /api/v1/cards/{card_id}/scan-image-enhancement/discard:
+    post:
+      summary: Discard the AI preview and keep the original scan
+      operationId: discardCardScanImageEnhancement
+      tags: [cards]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: card_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Card retaining its accepted scan
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CapturedCardResponse" }
+  /api/v1/cards/{card_id}/scan-image/{face}/pending:
+    get:
+      summary: Download a staged AI-cleaned scan preview
+      operationId: getCardPendingScanImage
+      tags: [cards]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: card_id, in: path, required: true, schema: { type: string } }
+        - { name: face, in: path, required: true, schema: { type: string, enum: [front, back] } }
+      responses:
+        "200":
+          description: AI preview image bytes
+          content:
+            image/png:
+              schema: { type: string, format: binary }
   /api/v1/user-cards:
     get:
       summary: List the authenticated user's own business cards
@@ -275,6 +332,63 @@ paths:
           description: LLM parsing service timed out
         "500":
           description: Database persistence failed
+  /api/v1/user-cards/{card_id}/scan-image-enhancement/retry:
+    post:
+      summary: Generate a new AI-cleaned scan preview
+      operationId: retryUserCardScanImageEnhancement
+      tags: [user-cards]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: card_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: User card with a staged AI preview or failed review status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserCardResponse" }
+  /api/v1/user-cards/{card_id}/scan-image-enhancement/confirm:
+    post:
+      summary: Use the staged AI-cleaned scan
+      operationId: confirmUserCardScanImageEnhancement
+      tags: [user-cards]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: card_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: User card using the approved AI scan
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserCardResponse" }
+  /api/v1/user-cards/{card_id}/scan-image-enhancement/discard:
+    post:
+      summary: Discard the AI preview and keep the original scan
+      operationId: discardUserCardScanImageEnhancement
+      tags: [user-cards]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: card_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: User card retaining its accepted scan
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserCardResponse" }
+  /api/v1/user-cards/{card_id}/scan-image/{face}/pending:
+    get:
+      summary: Download a staged AI-cleaned scan preview
+      operationId: getUserCardPendingScanImage
+      tags: [user-cards]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: card_id, in: path, required: true, schema: { type: string } }
+        - { name: face, in: path, required: true, schema: { type: string, enum: [front, back] } }
+      responses:
+        "200":
+          description: AI preview image bytes
+          content:
+            image/png:
+              schema: { type: string, format: binary }
   /api/v1/user-cards/{card_id}/wallet-display:
     patch:
       summary: Set display mode for a user card (photo scan vs design template)
@@ -478,6 +592,24 @@ components:
           type: string
           nullable: true
           description: API path to download the scan image (prepend server origin; requires Authorization header)
+        scan_image_front_url:
+          type: string
+          nullable: true
+        scan_image_back_url:
+          type: string
+          nullable: true
+        scan_image_front_pending_url:
+          type: string
+          nullable: true
+        scan_image_back_pending_url:
+          type: string
+          nullable: true
+        scan_image_enhancement_status:
+          type: string
+          enum: [none, processing, preview_ready, applied, discarded, failed]
+        scan_image_enhancement_error:
+          type: string
+          nullable: true
         wallet_display:
           type: string
           enum:
@@ -565,10 +697,49 @@ components:
           type: boolean
         sort_order:
           type: integer
+        scan_image_id:
+          type: string
+          nullable: true
+        scan_image_front_id:
+          type: string
+          nullable: true
+        scan_image_back_id:
+          type: string
+          nullable: true
+        scan_image_front_original_id:
+          type: string
+          nullable: true
+        scan_image_back_original_id:
+          type: string
+          nullable: true
+        scan_image_front_pending_id:
+          type: string
+          nullable: true
+        scan_image_back_pending_id:
+          type: string
+          nullable: true
         scan_image_url:
           type: string
           nullable: true
           description: API path to download the scan image (requires Authorization header)
+        scan_image_front_url:
+          type: string
+          nullable: true
+        scan_image_back_url:
+          type: string
+          nullable: true
+        scan_image_front_pending_url:
+          type: string
+          nullable: true
+        scan_image_back_pending_url:
+          type: string
+          nullable: true
+        scan_image_enhancement_status:
+          type: string
+          enum: [none, processing, preview_ready, applied, discarded, failed]
+        scan_image_enhancement_error:
+          type: string
+          nullable: true
         wallet_display:
           type: string
           enum: [photo, classic]

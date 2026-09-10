@@ -57,6 +57,48 @@ www.megaannum.ai
 Room 1705, 17/F, Harcourt House, 39 Gloucester Road, Wan Chai, Hong Kong
 """.strip()
 
+# WhatsApp number on the same line as the label.
+SAMPLE_OCR_WHATSAPP_SAME_LINE = """
+Alex Lee
+Sales Manager
+Megaannum Technology Limited
+alex@megaannum.ai
++852 2222 3333
+WhatsApp: +852 9123 4567
+www.megaannum.ai
+""".strip()
+
+# WhatsApp label on its own line, number on the next line.
+SAMPLE_OCR_WHATSAPP_NEXT_LINE = """
+Alex Lee
+Sales Manager
+Megaannum Technology Limited
+alex@megaannum.ai
++852 2222 3333
+WhatsApp
++852 9123 4567
+www.megaannum.ai
+""".strip()
+
+# Control case: no WhatsApp info at all, should not produce a whatsapp key.
+SAMPLE_OCR_NO_WHATSAPP = """
+Alex Lee
+Sales Manager
+Megaannum Technology Limited
+alex@megaannum.ai
++852 2222 3333
+www.megaannum.ai
+""".strip()
+
+# Real-world card (HK Tap House), WhatsApp number printed without a country code.
+SAMPLE_OCR_REAL_CARD_HK_TAP_HOUSE = """
+"Your Local Craft Beer Bar"
+Phone: 3705 9901
+WhatsApp: 9342 3418
+Email: hkitaphouse@gmail.com
+9-11 Tsing Fung Street, Tin Hau, HK
+""".strip()
+
 
 def has_chinese(text: str) -> bool:
     return any("\u4e00" <= ch <= "\u9fff" for ch in text)
@@ -72,6 +114,7 @@ def summarize(label: str, result) -> None:
     print("address_ch:", address_ch or "(missing)")
     if address_ch:
         print("address_ch has Chinese chars:", has_chinese(address_ch))
+    print("WhatsApp:", custom.get("WhatsApp", "(missing)"))
     print("full custom_fields:", json.dumps(custom, ensure_ascii=False, indent=2))
 
 
@@ -87,6 +130,10 @@ async def main() -> None:
         ("Front OCR with EN+ZH on same side", SAMPLE_OCR_FRONT_ONLY),
         ("Front+back OCR (--- BACK ---)", SAMPLE_OCR_FRONT_BACK),
         ("English-only OCR (no Chinese in input)", SAMPLE_OCR_ENGLISH_ONLY),
+        ("WhatsApp label + number on same line", SAMPLE_OCR_WHATSAPP_SAME_LINE),
+        ("WhatsApp label on its own line, number below", SAMPLE_OCR_WHATSAPP_NEXT_LINE),
+        ("No WhatsApp info (control case)", SAMPLE_OCR_NO_WHATSAPP),
+        ("Real card: HK Tap House (no country code on WhatsApp)", SAMPLE_OCR_REAL_CARD_HK_TAP_HOUSE),
     ]
     for label, ocr_text in cases:
         print(f"\nInput has Chinese: {has_chinese(ocr_text)}")

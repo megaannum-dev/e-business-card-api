@@ -31,6 +31,7 @@ from app.models.user_card import (
 )
 from app.services.scan_image_service import ScanImageService
 from app.services.user_card_service import UserCardNotFoundError, UserCardService
+from app.utils.multipart_files import optional_upload_file
 
 logger = logging.getLogger(__name__)
 
@@ -146,12 +147,13 @@ async def parse_user_card(
 )
 async def process_user_card(
     raw_ocr_text: str = Form(..., min_length=1, max_length=OCR_TEXT_MAX_LENGTH),
-    scan_image: UploadFile | None = File(None),
+    scan_image: UploadFile | str | None = File(None),
     scan_image_base64: str | None = Form(None),
-    scan_image_back: UploadFile | None = File(None),
+    scan_image_back: UploadFile | str | None = File(None),
     scan_image_back_base64: str | None = Form(None),
     design_id: str = Form("classic"),
     is_primary: bool = Form(False),
+    enhance_scan_image: bool = Form(True),
     owner_user_id: str = Depends(enforce_llm_rate_limit),
     user_card_service: UserCardService = Depends(get_user_card_service),
 ) -> UserCardResponse:
@@ -159,6 +161,8 @@ async def process_user_card(
     scan_image_content_type = "image/jpeg"
     scan_image_back_bytes: bytes | None = None
     scan_image_back_content_type = "image/jpeg"
+    scan_image = optional_upload_file(scan_image)
+    scan_image_back = optional_upload_file(scan_image_back)
 
     if scan_image_base64:
         payload = scan_image_base64.strip()
@@ -228,6 +232,7 @@ async def process_user_card(
             scan_image_back_content_type=scan_image_back_content_type,
             design_id=design_id.strip() or "classic",
             is_primary=is_primary,
+            enhance_scan_image=enhance_scan_image,
         )
     except OpenRouterTimeoutError as exc:
         raise HTTPException(
@@ -280,6 +285,81 @@ async def update_user_card_wallet_display(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
+
+
+@router.post(
+    "/{card_id}/scan-image-enhancement/retry",
+    response_model=UserCardResponse,
+    summary="Generate a new AI-cleaned scan preview",
+)
+async def retry_user_card_scan_image_enhancement(
+    card_id: str,
+    owner_user_id: str = Depends(enforce_llm_rate_limit),
+    user_card_service: UserCardService = Depends(get_user_card_service),
+) -> UserCardResponse:
+    try:
+        return await user_card_service.retry_scan_image_enhancement(card_id, owner_user_id)
+    except UserCardNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except CardPersistenceError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{card_id}/scan-image-enhancement/confirm",
+    response_model=UserCardResponse,
+    summary="Use the staged AI-cleaned scan",
+)
+async def confirm_user_card_scan_image_enhancement(
+    card_id: str,
+    owner_user_id: str = Depends(get_current_user_id),
+    user_card_service: UserCardService = Depends(get_user_card_service),
+) -> UserCardResponse:
+    try:
+        return await user_card_service.confirm_scan_image_enhancement(card_id, owner_user_id)
+    except UserCardNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except CardPersistenceError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{card_id}/scan-image-enhancement/discard",
+    response_model=UserCardResponse,
+    summary="Discard the AI-cleaned preview and use the original scan",
+)
+async def discard_user_card_scan_image_enhancement(
+    card_id: str,
+    owner_user_id: str = Depends(get_current_user_id),
+    user_card_service: UserCardService = Depends(get_user_card_service),
+) -> UserCardResponse:
+    try:
+        return await user_card_service.discard_scan_image_enhancement(card_id, owner_user_id)
+    except UserCardNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except CardPersistenceError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{card_id}/scan-image/{face}/pending",
+    summary="Download a staged AI-cleaned scan preview",
+)
+async def get_user_card_pending_scan_image(
+    card_id: str,
+    face: PhotoFace,
+    owner_user_id: str = Depends(get_current_user_id),
+    user_card_service: UserCardService = Depends(get_user_card_service),
+) -> Response:
+    try:
+        image_bytes, content_type = await user_card_service.get_pending_scan_image(
+            card_id,
+            owner_user_id,
+            face=face,
+        )
+    except ScanImageNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return Response(content=image_bytes, media_type=content_type)
 
 
 @router.get(
