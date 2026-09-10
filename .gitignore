@@ -3,6 +3,7 @@ env
 firebase-service-account.json
 firebase-service-account-dev.json
 secrets/
+backups/
 .venv/
 venv/
 __pycache__/
