@@ -106,5 +106,8 @@ echo "DEPLOY_ENV=$DEPLOY_ENV → $COMPOSE_FILE"
 echo ""
 echo "Repo: $ROOT_DIR"
 echo "API listening on http://127.0.0.1:8002 (localhost only)."
-echo "Test: curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8002/docs"
-echo "Public URL: $PUBLIC_DOCS_URL"
+echo "Health: curl -s -o /dev/null -w '%{http_code}\\n' http://127.0.0.1:8002/health"
+  echo "Public docs URL: $PUBLIC_DOCS_URL"
+else
+  echo "Swagger docs are disabled on prod. Use /health for connectivity."
+fi

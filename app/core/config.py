@@ -60,13 +60,10 @@ class Settings(BaseSettings):
     def enable_docs(self) -> bool:
         """Swagger UI (/docs), ReDoc (/redoc) and /openapi.json.
 
-        Always on for now: the current mobile app treats a missing /docs as
-        "API offline". Keep this True until the app ships a GET /health check.
-
-        Stored prod gate — restore this return after the frontend change:
-            return self.deploy_env.strip().lower() == "dev"
+        Hidden only when DEPLOY_ENV=prod (production Docker). Dev and local
+        keep docs. The mobile app uses GET /health for connectivity, not /docs.
         """
-        return True
+        return self.deploy_env.strip().lower() != "prod"
 
 
 @lru_cache

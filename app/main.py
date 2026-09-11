@@ -37,6 +37,11 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if settings.enable_docs else None,
         openapi_url="/openapi.json" if settings.enable_docs else None,
     )
+    logger.info(
+        "Swagger docs %s (DEPLOY_ENV=%s)",
+        "enabled" if settings.enable_docs else "disabled",
+        settings.deploy_env,
+    )
 
     app.add_middleware(
         CORSMiddleware,
