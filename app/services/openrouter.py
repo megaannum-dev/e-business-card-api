@@ -67,7 +67,8 @@ Return ONLY a valid JSON object with exactly this shape:
 
 Rules:
 - Put standard fields in core_fields (including job_title for role/position). Put everything else (fax, address, social handles, etc.) in custom_fields.
-- name is required. Use null for unknown core_fields values, not empty strings.
+- name must NEVER be null or empty, even if no personal name is printed on the card. If there is no personal name, use the company_name as the name instead. If there is neither a personal name nor a company_name anywhere on the card, use "Unknown" as the name.
+- For the other core_fields (company_name, job_title, email, phone, website), use null for values that are genuinely absent, not empty strings.
 - custom_fields values must be strings. Omit empty custom_fields entries.
 - Use snake_case keys in custom_fields. For localized variants of the same field, use `{field}_{lang}` where lang is a short code: en (English), cn (Chinese), ja (Japanese), ko (Korean), fr (French), etc. Examples: address_en, address_cn, alternate_name_cn, fax_en. Do not use human-readable labels like "Address (English)" as keys.
 - When both English and Chinese addresses appear on a card, store them as address_en and address_cn (not address_ch or address_zh).
