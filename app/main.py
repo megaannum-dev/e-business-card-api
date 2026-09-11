@@ -22,6 +22,11 @@ async def lifespan(_: FastAPI):
     get_motor_client(settings)
     init_firebase(settings)
     logger.info("MongoDB client initialized")
+    logger.info(
+        "Swagger docs %s (DEPLOY_ENV=%s)",
+        "enabled" if settings.enable_docs else "disabled",
+        settings.deploy_env,
+    )
     yield
     await close_motor_client()
     logger.info("MongoDB client closed")

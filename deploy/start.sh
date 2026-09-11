@@ -5,6 +5,8 @@
 #   bash deploy/start.sh           # uses DEPLOY_ENV from .env (dev or prod)
 #   bash deploy/start.sh --dev     # force dev compose (bridge networking)
 #   bash deploy/start.sh --prod    # force prod compose (host networking)
+#   sudo env DEPLOY_ENV=prod bash deploy/start.sh --dev
+#     keep the dev compose file, but hide /docs as prod would
 
 set -euo pipefail
 
@@ -24,7 +26,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     -h|--help)
       echo "Usage: bash deploy/start.sh [--dev|--prod]"
-      echo "  DEPLOY_ENV in .env selects deploy/docker-compose.dev.yml or .prod.yml"
+      echo "  --dev / --prod selects the compose file (networking)."
+      echo "  Prefix DEPLOY_ENV=prod to hide Swagger while still using --dev:"
+      echo "    sudo env DEPLOY_ENV=prod bash deploy/start.sh --dev"
       exit 0
       ;;
     *)
@@ -39,14 +43,18 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+# Remember a caller override (sudo env DEPLOY_ENV=prod ...) before .env overwrites it.
+CALLER_DEPLOY_ENV="${DEPLOY_ENV:-}"
+
 set -a
 # shellcheck disable=SC1091
 # Strip Windows CRLF if .env was uploaded from Windows
 source <(sed 's/\r$//' .env)
 set +a
 
-DEPLOY_ENV="${CLI_DEPLOY_ENV:-${DEPLOY_ENV:-prod}}"
-case "$DEPLOY_ENV" in
+# --dev/--prod picks the compose file. App DEPLOY_ENV can differ for docs-gate tests.
+COMPOSE_SELECTOR="${CLI_DEPLOY_ENV:-${DEPLOY_ENV:-prod}}"
+case "$COMPOSE_SELECTOR" in
   dev)
     COMPOSE_FILE="deploy/docker-compose.dev.yml"
     PUBLIC_DOCS_URL="https://focms.megaannum.ai:8001/docs"
@@ -56,10 +64,17 @@ case "$DEPLOY_ENV" in
     PUBLIC_DOCS_URL="https://ebc.megaannum.ai/docs"
     ;;
   *)
-    echo "Invalid DEPLOY_ENV=$DEPLOY_ENV (use dev or prod in .env, or pass --dev / --prod)"
+    echo "Invalid DEPLOY_ENV=$COMPOSE_SELECTOR (use dev or prod in .env, or pass --dev / --prod)"
     exit 1
     ;;
 esac
+
+if [[ -n "$CALLER_DEPLOY_ENV" ]]; then
+  DEPLOY_ENV="$CALLER_DEPLOY_ENV"
+elif [[ -n "$CLI_DEPLOY_ENV" ]]; then
+  DEPLOY_ENV="$CLI_DEPLOY_ENV"
+fi
+DEPLOY_ENV="${DEPLOY_ENV:-$COMPOSE_SELECTOR}"
 
 FIREBASE_CREDS="${FIREBASE_CREDENTIALS_PATH:-./firebase-service-account.json}"
 # Compose resolves relative volume paths from deploy/, not repo root — use absolute path.
@@ -93,10 +108,12 @@ fi
 # Docker Compose reads --env-file literally; strip CRLF and pass secrets dir (absolute path).
 ENV_FILE="$(mktemp)"
 trap 'rm -f "$ENV_FILE"' EXIT
-sed 's/\r$//' .env | grep -v '^SECRETS_BIND_MOUNT=' > "$ENV_FILE"
+sed 's/\r$//' .env | grep -v '^SECRETS_BIND_MOUNT=' | grep -v '^DEPLOY_ENV=' > "$ENV_FILE"
 printf 'SECRETS_BIND_MOUNT=%s\n' "$SECRETS_DIR" >> "$ENV_FILE"
+printf 'DEPLOY_ENV=%s\n' "$DEPLOY_ENV" >> "$ENV_FILE"
 
-echo "DEPLOY_ENV=$DEPLOY_ENV → $COMPOSE_FILE"
+echo "Compose: $COMPOSE_SELECTOR → $COMPOSE_FILE"
+echo "App DEPLOY_ENV=$DEPLOY_ENV (Swagger $([ "$DEPLOY_ENV" = prod ] && echo disabled || echo enabled))"
 "${DOCKER[@]}" compose \
   --project-directory "$ROOT_DIR" \
   --env-file "$ENV_FILE" \
