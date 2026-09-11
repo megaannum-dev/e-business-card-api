@@ -56,13 +56,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    @app.get("/health", include_in_schema=False)
+    @app.get("/health")
     async def health_check() -> dict[str, str]:
-        """Always-on liveness endpoint for the mobile app's connectivity check.
-
-        Unlike /docs, this is never gated behind ENABLE_DOCS / DEPLOY_ENV —
-        it carries no documentation content, just a plain 200 so clients can
-        tell the API is reachable before attempting a real request.
+        """Liveness check for the mobile app. Always mounted, including on prod
+        where Swagger is off — clients should call GET /health, not /docs.
         """
         return {"status": "ok"}
 
