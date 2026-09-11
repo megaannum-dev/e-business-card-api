@@ -17,7 +17,8 @@
 # the matching hour.
 #
 # Usage: bash deploy/backup_mongo.sh
-# Cron:  */15 * * * * cd /opt/e-business-card-api && bash deploy/backup_mongo.sh >> backups/cron.log 2>&1
+# Cron is registered automatically by `bash deploy/start.sh` when BACKUP_ENABLED=true
+# in .env — no manual crontab setup needed.
 
 set -euo pipefail
 
