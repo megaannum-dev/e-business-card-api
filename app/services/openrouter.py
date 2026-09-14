@@ -42,6 +42,22 @@ _CUSTOM_FIELD_KEY_ALIASES: dict[str, str] = {
     "whatsapp number": "WhatsApp",
     "whatsapp no": "WhatsApp",
     "whatsapp no.": "WhatsApp",
+    # Keep in sync with CUSTOM_FIELD_KEY_ALIASES in the mobile app
+    # (src/utils/customFieldKeys.ts): the app reads this key to show the
+    # WeChat button, so a spelling missed here silently hides it.
+    "wechat": "wechat_id",
+    "we chat": "wechat_id",
+    "wechat id": "wechat_id",
+    "wechat no": "wechat_id",
+    "wechat no.": "wechat_id",
+    "wechat number": "wechat_id",
+    "wechat account": "wechat_id",
+    "weixin": "wechat_id",
+    "weixin id": "wechat_id",
+    "微信": "wechat_id",
+    "微信号": "wechat_id",
+    "微信號": "wechat_id",
+    "微信id": "wechat_id",
 }
 
 _LANG_SUFFIX_ALIASES = {"zh": "cn", "ch": "cn"}
@@ -72,6 +88,8 @@ Rules:
 - custom_fields values must be strings. Omit empty custom_fields entries.
 - Use snake_case keys in custom_fields. For localized variants of the same field, use `{field}_{lang}` where lang is a short code: en (English), cn (Chinese), ja (Japanese), ko (Korean), fr (French), etc. Examples: address_en, address_cn, alternate_name_cn, fax_en. Do not use human-readable labels like "Address (English)" as keys.
 - When both English and Chinese addresses appear on a card, store them as address_en and address_cn (not address_ch or address_zh).
+- Store a WeChat ID as `wechat_id` regardless of how the card labels it (WeChat, WeChat ID, Weixin, 微信, 微信号). Do not use `wechat`, `weixin`, or `微信` as the key.
+- Words that merely label a QR code or a social icon are captions, not values. Cards often print "WeChat" and "WhatsApp" side by side above two QR codes, and headings like "Welcome to contact us via WeChat". Never emit a field whose value is a service name (e.g. WhatsApp: "WeChat"), and only set wechat_id when an actual ID string is printed next to the label. If a service is named but no handle or number appears, omit that field entirely.
 - Always capture every address line present in the OCR text. If Chinese address characters (e.g. 香港, 道, 室) appear anywhere—including after `--- BACK ---`—put the full Chinese address in address_cn. Do not drop or summarize away Chinese address lines.
 - If a WhatsApp number/account appears (usually labeled "WhatsApp" or next to a WhatsApp icon), put it in custom_fields.WhatsApp (use this exact capitalization, not snake_case). Keep the number in its original readable format, including the country code (e.g. "+852 9123 4567"); do not strip spaces, dashes, or the leading "+".
 - Do not wrap the JSON in markdown. Do not add commentary or extra keys.
