@@ -9,9 +9,6 @@
 #   BACKUP_HOUR          0-23, the local hour to back up in (default: 3)
 #   BACKUP_DIR           where to write backups (default: ./backups)
 #
-# Archives are organized into BACKUP_DIR/<YYYY>/<YYYY-MM>/ subfolders (one per
-# calendar year/month) to keep BACKUP_DIR from turning into a flat pile of files.
-#
 # Backups are kept forever (no automatic deletion) — manage disk space
 # manually if BACKUP_DIR starts filling up.
 #
@@ -20,8 +17,7 @@
 # the matching hour.
 #
 # Usage: bash deploy/backup_mongo.sh
-# Cron is registered automatically by `bash deploy/start.sh` when BACKUP_ENABLED=true
-# in .env — no manual crontab setup needed.
+# Cron:  */15 * * * * cd /opt/e-business-card-api && bash deploy/backup_mongo.sh >> backups/cron.log 2>&1
 
 set -euo pipefail
 
@@ -97,9 +93,7 @@ fi
 TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
 DUMP_NAME="mongo_backup_${TIMESTAMP}"
 CONTAINER_DUMP_PATH="/tmp/${DUMP_NAME}.archive.gz"
-ARCHIVE_MONTH_DIR="${BACKUP_DIR}/$(date '+%Y')/$(date '+%Y-%m')"
-mkdir -p "$ARCHIVE_MONTH_DIR"
-ARCHIVE_PATH="${ARCHIVE_MONTH_DIR}/${DUMP_NAME}.archive.gz"
+ARCHIVE_PATH="${BACKUP_DIR}/${DUMP_NAME}.archive.gz"
 DB_NAME="${MONGO_DB_NAME:-e_business_card}"
 
 log "[START] Starting MongoDB backup of '${DB_NAME}' from container '${MONGO_CONTAINER}' -> ${ARCHIVE_PATH}"
