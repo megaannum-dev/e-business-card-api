@@ -120,6 +120,25 @@ echo "App DEPLOY_ENV=$DEPLOY_ENV (Swagger $([ "$DEPLOY_ENV" = prod ] && echo dis
   -f "$COMPOSE_FILE" \
   up -d --build --force-recreate
 
+BACKUP_ENABLED="${BACKUP_ENABLED:-false}"
+shopt -s nocasematch
+if [[ "$BACKUP_ENABLED" == "true" || "$BACKUP_ENABLED" == "1" ]]; then
+  shopt -u nocasematch
+  BACKUP_DIR="${BACKUP_DIR:-$ROOT_DIR/backups}"
+  mkdir -p "$BACKUP_DIR"
+
+  CRON_LINE="*/15 * * * * cd $ROOT_DIR && bash deploy/backup_mongo.sh >> $BACKUP_DIR/cron.log 2>&1"
+  if crontab -l 2>/dev/null | grep -Fq "deploy/backup_mongo.sh"; then
+    echo "Crontab entry for scheduled backups already present, skipping."
+  else
+    (crontab -l 2>/dev/null; echo "$CRON_LINE") | crontab -
+    echo "Registered crontab entry for scheduled backups (every 15 min, backs up at BACKUP_HOUR=${BACKUP_HOUR:-3} into $BACKUP_DIR)."
+  fi
+else
+  shopt -u nocasematch
+  echo "BACKUP_ENABLED is not true — skipping backup directory setup and crontab registration."
+fi
+
 echo ""
 echo "Repo: $ROOT_DIR"
 echo "API listening on http://127.0.0.1:8002 (localhost only)."
