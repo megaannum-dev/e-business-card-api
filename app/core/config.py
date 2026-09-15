@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     # Total image-generation attempts before falling back to the original scan.
     openrouter_image_max_attempts: int = 3
 
+    # Vision pass that reads social-media ICONS off a card (e.g. a WeChat logo
+    # beside a handle, with no "WeChat" text for OCR to find). Must be a
+    # multimodal CHAT model -- image *generation* models such as
+    # x-ai/grok-imagine-* cannot answer questions about an image.
+    openrouter_vision_enabled: bool = False
+    openrouter_vision_model: str = "x-ai/grok-2-vision-1212"
+    openrouter_vision_timeout_seconds: float = 30.0
+
     ocr_text_max_length: int = 1500
     ocr_text_max_lines: int = 35
     llm_max_custom_fields: int = 30
