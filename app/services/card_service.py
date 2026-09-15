@@ -9,6 +9,7 @@ from motor.motor_asyncio import AsyncIOMotorCollection
 from pydantic import ValidationError
 from pymongo.errors import PyMongoError
 
+from app.core.config import get_settings
 from app.core.exceptions import (
     CardNotFoundError,
     CardPersistenceError,
@@ -249,6 +250,7 @@ class CardService:
 
         try:
             parsed = await self._openrouter.parse_ocr_text(str(raw_ocr_text))
+            await self._augment_with_social_icons(document, parsed)
             suggestions = CardService._build_enhancement_suggestions(
                 current_core=document.get("core_fields", {}),
                 current_custom=document.get("custom_fields", {}),
@@ -977,6 +979,79 @@ class CardService:
             edited_fields,
         )
         return core_fields, custom_fields
+
+
+    @staticmethod
+    def _social_fields_still_missing(custom_fields: dict) -> set[str]:
+        """Which social handles the text pass failed to find.
+
+        Per service, not all-or-nothing: a card can name one service in text
+        while marking the other with a bare icon, so finding WhatsApp is no
+        reason to stop looking for WeChat.
+        """
+        missing = {
+            key
+            for key in ("wechat_id", "WhatsApp")
+            if not str(custom_fields.get(key, "") or "").strip()
+        }
+        # A WeChat QR already gives the user a route in, so WeChat is covered --
+        # but that says nothing about WhatsApp.
+        if str(custom_fields.get("wechat_qr_url", "") or "").strip():
+            missing.discard("wechat_id")
+        return missing
+
+    async def _augment_with_social_icons(
+        self,
+        document: dict,
+        parsed: CapturedCardBase,
+    ) -> None:
+        """Fill icon-only social handles that OCR cannot see.
+
+        Cards sometimes mark a handle with a bare WeChat or WhatsApp logo and no
+        text label, so the text pass has nothing to match on. A vision pass can
+        read the logo -- but it is only worth its cost when the text pass came
+        up empty, so this is gated hard and mutates `parsed` in place. The
+        result then flows through the normal suggestion path, which means the
+        user reviews it rather than it being written silently.
+        """
+        settings = get_settings()
+        if not settings.openrouter_vision_enabled or self._scan_images is None:
+            return
+
+        existing = {**document.get("custom_fields", {}), **parsed.custom_fields}
+        missing = CardService._social_fields_still_missing(existing)
+        if not missing:
+            return
+
+        # Two-sided cards routinely print the social icons on the back, so
+        # check both faces. Front first, so it wins any disagreement, and stop
+        # as soon as everything we were looking for has been found.
+        image_ids = [
+            CardService._scan_front_image_id(document),
+            CardService._scan_back_image_id(document),
+        ]
+        found: dict[str, str] = {}
+        for image_id in image_ids:
+            if not image_id or not (missing - set(found)):
+                continue
+            try:
+                image_bytes, content_type = await self._scan_images.read(image_id)
+                side = await self._openrouter.detect_social_handles(image_bytes, content_type)
+            except Exception:  # noqa: BLE001 - never fail enhancement over this
+                logger.warning(
+                    "Social icon pass failed for card %s image %s",
+                    document.get("_id"),
+                    image_id,
+                    exc_info=True,
+                )
+                continue
+            for key, value in side.items():
+                if key in missing and key not in found:
+                    found[key] = value
+
+        for key, value in found.items():
+            if key not in parsed.custom_fields:
+                parsed.custom_fields[key] = value
 
     @staticmethod
     def _build_enhancement_suggestions(
