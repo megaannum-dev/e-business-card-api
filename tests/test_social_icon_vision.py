@@ -313,3 +313,83 @@ class TestTwoSidedCards:
         await service._augment_with_social_icons({"scan_image_front_id": "front1"}, parsed)
         assert parsed.custom_fields["wechat_id"] == "FROM_TEXT"
         assert openrouter.calls == ["front1"]  # still looked for WhatsApp
+
+
+@pytest.mark.usefixtures("vision_on")
+class TestOnlineScanPath:
+    """The online scan never reaches enhance_card(), so it needs its own pass."""
+
+    @staticmethod
+    def _service(openrouter):
+        from app.services.card_service import CardService
+
+        service = CardService.__new__(CardService)
+        service._openrouter = openrouter
+        service._scan_images = None
+        return service
+
+    @pytest.mark.asyncio
+    async def test_reads_an_icon_from_the_front_during_a_scan(self):
+        openrouter = _FakeOpenRouter({"front": {"wechat_id": "ILIAJEWELLERY"}})
+        parsed = _parsed()
+        await self._service(openrouter)._augment_with_social_icons_from_bytes(
+            parsed, [(b"bytes-front", "image/jpeg"), (None, "image/jpeg")]
+        )
+        assert parsed.custom_fields["wechat_id"] == "ILIAJEWELLERY"
+
+    @pytest.mark.asyncio
+    async def test_reads_an_icon_from_the_back_during_a_scan(self):
+        openrouter = _FakeOpenRouter({"back": {"WhatsApp": "+852 1"}})
+        parsed = _parsed()
+        await self._service(openrouter)._augment_with_social_icons_from_bytes(
+            parsed, [(b"bytes-front", "image/jpeg"), (b"bytes-back", "image/jpeg")]
+        )
+        assert parsed.custom_fields["WhatsApp"] == "+852 1"
+
+    @pytest.mark.asyncio
+    async def test_no_call_when_the_text_pass_already_found_both(self):
+        openrouter = _FakeOpenRouter({"front": {"wechat_id": "X"}})
+        parsed = _parsed({"wechat_id": "A", "WhatsApp": "B"})
+        await self._service(openrouter)._augment_with_social_icons_from_bytes(
+            parsed, [(b"bytes-front", "image/jpeg")]
+        )
+        assert openrouter.calls == []
+
+    @pytest.mark.asyncio
+    async def test_a_scan_with_no_images_makes_no_call(self):
+        openrouter = _FakeOpenRouter({})
+        await self._service(openrouter)._augment_with_social_icons_from_bytes(
+            _parsed(), [(None, "image/jpeg"), (None, "image/jpeg")]
+        )
+        assert openrouter.calls == []
+
+    @pytest.mark.asyncio
+    async def test_a_vision_failure_does_not_break_the_scan(self):
+        class Boom(_FakeOpenRouter):
+            async def detect_social_handles(self, image_bytes, content_type="image/jpeg"):
+                raise RuntimeError("vision down")
+
+        parsed = _parsed()
+        await self._service(Boom({}))._augment_with_social_icons_from_bytes(
+            parsed, [(b"bytes-front", "image/jpeg")]
+        )
+        assert parsed.custom_fields == {}
+
+
+class TestOnlineScanRespectsTheFlag:
+    @pytest.mark.asyncio
+    async def test_disabled_makes_no_call(self, monkeypatch):
+        from app.core.config import Settings
+        import app.services.card_service as cs
+        from app.services.card_service import CardService
+
+        monkeypatch.setattr(
+            cs, "get_settings", lambda: Settings(openrouter_vision_enabled=False)
+        )
+        openrouter = _FakeOpenRouter({"front": {"wechat_id": "X"}})
+        service = CardService.__new__(CardService)
+        service._openrouter = openrouter
+        await service._augment_with_social_icons_from_bytes(
+            _parsed(), [(b"bytes-front", "image/jpeg")]
+        )
+        assert openrouter.calls == []
