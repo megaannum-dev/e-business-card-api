@@ -58,6 +58,15 @@ class CardService:
         scan_image_back_content_type: str = "image/jpeg",
     ) -> CapturedCardResponse:
         parsed = await self._openrouter.parse_ocr_text(raw_ocr_text)
+        # Online scans never reach enhance_card(), which only runs for offline
+        # drafts, so the icon pass has to happen here too.
+        await self._augment_with_social_icons_from_bytes(
+            parsed,
+            [
+                (scan_image_bytes, scan_image_content_type),
+                (scan_image_back_bytes, scan_image_back_content_type),
+            ],
+        )
 
         document = CapturedCardDocument(
             owner_user_id=owner_user_id,
@@ -980,6 +989,42 @@ class CardService:
         )
         return core_fields, custom_fields
 
+
+    async def _augment_with_social_icons_from_bytes(
+        self,
+        parsed: CapturedCardBase,
+        images: list[tuple[bytes | None, str]],
+    ) -> None:
+        """Icon pass over images we already hold in memory.
+
+        Used on the online scan path, where the card is not yet persisted and
+        the bytes arrived with the request. Same gate and same per-side merge
+        as the stored-card variant.
+        """
+        if not get_settings().openrouter_vision_enabled:
+            return
+        missing = CardService._social_fields_still_missing(parsed.custom_fields)
+        if not missing:
+            return
+
+        found: dict[str, str] = {}
+        for image_bytes, content_type in images:
+            if not image_bytes or not (missing - set(found)):
+                continue
+            try:
+                side = await self._openrouter.detect_social_handles(
+                    image_bytes, content_type
+                )
+            except Exception:  # noqa: BLE001 - a scan must never fail over this
+                logger.warning("Social icon pass failed during scan", exc_info=True)
+                continue
+            for key, value in side.items():
+                if key in missing and key not in found:
+                    found[key] = value
+
+        for key, value in found.items():
+            if key not in parsed.custom_fields:
+                parsed.custom_fields[key] = value
 
     @staticmethod
     def _social_fields_still_missing(custom_fields: dict) -> set[str]:
