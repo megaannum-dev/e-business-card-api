@@ -142,6 +142,21 @@ class TestDefaults:
         # about one; picking it here would fail at runtime, not at startup.
         assert "imagine" not in Settings().openrouter_vision_model
 
+    def test_default_vision_model_is_not_a_retired_id(self):
+        # x-ai/grok-2-vision-1212 was the first default and now 404s:
+        # "No endpoints found". Model ids get retired; this pins the lesson.
+        assert Settings().openrouter_vision_model != "x-ai/grok-2-vision-1212"
+
+    def test_default_vision_model_is_not_a_known_text_only_id(self):
+        # Vendor is not the signal -- DeepSeek ships both text-only models and
+        # vision ones. Only these specific ids lack image input.
+        TEXT_ONLY = {
+            "deepseek/deepseek-chat",
+            "deepseek/deepseek-v4-flash",
+            "~deepseek/deepseek-v4-flash-latest",
+        }
+        assert Settings().openrouter_vision_model not in TEXT_ONLY
+
 
 class TestSocialFieldsStillMissing:
     """The gate deciding whether a vision call is worth making, per service."""
