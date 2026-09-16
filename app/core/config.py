@@ -47,11 +47,23 @@ class Settings(BaseSettings):
     openrouter_image_max_attempts: int = 3
 
     # Vision pass that reads social-media ICONS off a card (e.g. a WeChat logo
-    # beside a handle, with no "WeChat" text for OCR to find). Must be a
-    # multimodal CHAT model -- image *generation* models such as
-    # x-ai/grok-imagine-* cannot answer questions about an image.
+    # beside a handle, with no "WeChat" text for OCR to find).
+    #
+    # Must be a multimodal CHAT model that accepts image input. Two ways to get
+    # this wrong, both of which fail only at request time:
+    #   * image *generation* models (x-ai/grok-imagine-*) cannot answer
+    #     questions about an image;
+    #   * text-only chat models (deepseek/deepseek-chat) reject image parts.
+    # Model ids are also retired over time -- x-ai/grok-2-vision-1212 now 404s.
+    # Verify against https://openrouter.ai/api/v1/models before changing:
+    # "image" must appear in architecture.input_modalities.
+    #
+    # The default is a DeepSeek vision model: same vendor as the text pass, no
+    # US-provider dependency, and cheaper than the Gemini/Grok equivalents. The
+    # leading "~" marks a floating "latest" pointer, so behaviour can change
+    # under you; pin deepseek/deepseek-v4.1-flash instead if that matters.
     openrouter_vision_enabled: bool = False
-    openrouter_vision_model: str = "x-ai/grok-2-vision-1212"
+    openrouter_vision_model: str = "~deepseek/deepseek-flash-latest"
     openrouter_vision_timeout_seconds: float = 30.0
 
     ocr_text_max_length: int = 1500
