@@ -42,6 +42,7 @@ class DocsGateTests(unittest.TestCase):
         self.assertEqual(client.get("/health").status_code, 200)
         self.assertEqual(client.get("/docs").status_code, 200)
         self.assertEqual(client.get("/openapi.json").status_code, 200)
+        self.assertIn("/health", client.get("/openapi.json").json()["paths"])
 
 
 if __name__ == "__main__":
