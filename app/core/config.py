@@ -58,12 +58,13 @@ class Settings(BaseSettings):
     # Verify against https://openrouter.ai/api/v1/models before changing:
     # "image" must appear in architecture.input_modalities.
     #
-    # The default is a DeepSeek vision model: same vendor as the text pass, no
-    # US-provider dependency, and cheaper than the Gemini/Grok equivalents. The
-    # leading "~" marks a floating "latest" pointer, so behaviour can change
-    # under you; pin deepseek/deepseek-v4.1-flash instead if that matters.
+    # The default is a DeepSeek vision model: same vendor as the text pass and
+    # no US-provider dependency. Use a PLAIN, PINNED id -- OpenRouter lists
+    # floating "latest" pointers with a leading "~" (~deepseek/deepseek-flash-
+    # latest), and that prefix does not survive .env -> compose -> container,
+    # arriving as an invalid id and failing with HTTP 400.
     openrouter_vision_enabled: bool = False
-    openrouter_vision_model: str = "~deepseek/deepseek-flash-latest"
+    openrouter_vision_model: str = "deepseek/deepseek-v4.1-flash"
     openrouter_vision_timeout_seconds: float = 30.0
 
     ocr_text_max_length: int = 1500
