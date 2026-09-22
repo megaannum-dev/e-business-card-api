@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from pymongo.errors import PyMongoError
 
-from app.core.auth import get_current_user_id
+from app.core.auth import get_current_user_id, get_current_user_id_strict
 from app.core.exceptions import CardPersistenceError
 from app.db.mongodb import (
     get_cards_collection,
@@ -35,7 +35,7 @@ def get_account_service() -> AccountService:
     summary="Delete the authenticated user's account and all associated data",
 )
 async def delete_account(
-    owner_user_id: str = Depends(get_current_user_id),
+    owner_user_id: str = Depends(get_current_user_id_strict),
     account_service: AccountService = Depends(get_account_service),
 ) -> None:
     try:

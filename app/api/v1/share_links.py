@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from motor.motor_asyncio import AsyncIOMotorCollection
 
-from app.core.auth import get_current_user_id
+from app.core.auth import get_current_user_id, get_current_user_id_strict
 from app.core.config import Settings, get_settings
 from app.core.exceptions import CardPersistenceError, ScanImageNotFoundError
 from app.db.mongodb import (
@@ -44,7 +44,7 @@ def get_share_link_service(
 )
 async def create_or_get_share_link(
     card_id: str,
-    owner_user_id: str = Depends(get_current_user_id),
+    owner_user_id: str = Depends(get_current_user_id_strict),
     service: ShareLinkService = Depends(get_share_link_service),
 ) -> ShareLinkResponse:
     try:
@@ -63,7 +63,7 @@ async def create_or_get_share_link(
 )
 async def revoke_share_link(
     card_id: str,
-    owner_user_id: str = Depends(get_current_user_id),
+    owner_user_id: str = Depends(get_current_user_id_strict),
     service: ShareLinkService = Depends(get_share_link_service),
 ) -> None:
     try:
