@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from fastapi.responses import Response
 from motor.motor_asyncio import AsyncIOMotorCollection
 
-from app.core.auth import get_current_user_id
+from app.core.auth import get_current_user_id, get_current_user_id_strict
 from app.core.exceptions import (
     CardPersistenceError,
     OpenRouterError,
@@ -465,7 +465,7 @@ async def update_user_card(
 )
 async def delete_user_card(
     card_id: str,
-    owner_user_id: str = Depends(get_current_user_id),
+    owner_user_id: str = Depends(get_current_user_id_strict),
     user_card_service: UserCardService = Depends(get_user_card_service),
 ) -> None:
     try:

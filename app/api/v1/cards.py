@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from fastapi.responses import Response
 from motor.motor_asyncio import AsyncIOMotorCollection
 
-from app.core.auth import get_current_user_id
+from app.core.auth import get_current_user_id, get_current_user_id_strict
 from app.core.exceptions import (
     CardNotFoundError,
     CardPersistenceError,
@@ -459,7 +459,7 @@ async def update_wallet_display(
 )
 async def delete_card(
     card_id: str,
-    owner_user_id: str = Depends(get_current_user_id),
+    owner_user_id: str = Depends(get_current_user_id_strict),
     card_service: CardService = Depends(get_card_service),
 ) -> None:
     try:
