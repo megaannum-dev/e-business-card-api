@@ -18,7 +18,11 @@ Mobile app production URL: `https://focms.megaannum.ai:8001`
 | `docker-compose.dev.yml` | Dev server — bridge networking (`focms.megaannum.ai:8001`) |
 | `docker-compose.prod.yml` | Prod server — host networking (`ebc.megaannum.ai`; fixes broken Docker DNS) |
 | `start.sh` | Build and start containers (`DEPLOY_ENV` in `.env`, or `--dev` / `--prod`) |
-| `nginx/focms-ebc-8001.conf` | nginx SSL on port 8001 |
+| `nginx/focms-ebc-8001.conf` | nginx server block: SSL on 8001, per-IP rate limits, security headers |
+| `nginx/conf.d/ebc-ratelimit.conf` | Rate limit zones (http-level -- must go in `/etc/nginx/conf.d/`) |
+| `nginx/snippets/ebc-proxy.conf` | Shared `proxy_pass` settings included by every location |
+| `alert_auth_anomalies.sh` | 401/403 and 429 alerting (cron, every 5 min) |
+| `RUNBOOK.md` | Incident triage |
 | `.env.dev.example` | Template for **dev** server `.env` (`DEPLOY_ENV=dev`) |
 | `.env.production.example` | Template for **prod** server `.env` (`DEPLOY_ENV=prod`) |
 | `setup-server.sh` | One-time Docker/nginx install (skip if CMS server already set up) |
@@ -83,11 +87,33 @@ docker ps   # ebc-api, ebc-mongodb
 
 SSL for `focms.megaannum.ai` should already exist from CMS setup.
 
+This server's nginx has **no `sites-available` / `sites-enabled`** (those are a
+Debian convention; `nginx.conf` here includes `/etc/nginx/conf.d/*.conf`).
+Install all three files -- the server block alone fails `nginx -t`, because the
+rate limit zones are http-level and the proxy snippet is included by every
+location:
+
 ```bash
-sudo cp deploy/nginx/focms-ebc-8001.conf /etc/nginx/sites-available/ebc-api
-sudo ln -sf /etc/nginx/sites-available/ebc-api /etc/nginx/sites-enabled/
+sudo mkdir -p /etc/nginx/snippets
+sudo cp deploy/nginx/snippets/ebc-proxy.conf      /etc/nginx/snippets/ebc-proxy.conf
+sudo cp deploy/nginx/conf.d/ebc-ratelimit.conf    /etc/nginx/conf.d/00-ebc-ratelimit.conf
+sudo cp deploy/nginx/focms-ebc-8001.conf          /etc/nginx/conf.d/ebc-api-8001.conf
 sudo nginx -t && sudo systemctl reload nginx
 ```
+
+`conf.d/*.conf` is included in alphabetical order, so the `00-` prefix keeps the
+zones ahead of the server block that uses them.
+
+> **Check for duplicates before you edit anything.** Two `server` blocks both on
+> `listen 8001` with the same `server_name` silently resolve to whichever nginx
+> parses first, and edits to the other file do nothing:
+>
+> ```bash
+> sudo grep -rn "listen 8001" /etc/nginx/ && sudo nginx -t
+> ```
+>
+> A `conflicting server name ... ignored` warning means exactly this. Move the
+> loser out of `conf.d/` rather than deleting it.
 
 If cert paths differ, check: `sudo ls /etc/letsencrypt/live/`
 
