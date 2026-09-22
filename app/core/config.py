@@ -76,6 +76,10 @@ class Settings(BaseSettings):
     llm_rate_limit_per_day: int = 20
 
     firebase_credentials_path: str = ""
+    # Comma-separated browser origins allowed to call the API cross-origin.
+    # The mobile app is NOT affected: React Native sends no Origin header.
+    # Only real browser callers need listing here.
+    cors_allowed_origins: str = ""
 
     @property
     def enable_docs(self) -> bool:
@@ -85,6 +89,10 @@ class Settings(BaseSettings):
         keep docs. The mobile app uses GET /health for connectivity, not /docs.
         """
         return self.deploy_env.strip().lower() != "prod"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()]    
 
 
 @lru_cache
