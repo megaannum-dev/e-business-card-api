@@ -17,10 +17,29 @@ from app.models.card import CapturedCardBase
 logger = logging.getLogger(__name__)
 
 _CORE_FIELD_KEYS = frozenset(
-    {"name", "company_name", "job_title", "email", "phone", "website"},
+    {
+        "name",
+        "first_name",
+        "last_name",
+        "name_cn",
+        "company_name",
+        "job_title",
+        "email",
+        "phone",
+        "website",
+    },
 )
 _OPTIONAL_CORE_FIELD_KEYS = frozenset(
-    {"company_name", "job_title", "email", "phone", "website"},
+    {
+        "first_name",
+        "last_name",
+        "name_cn",
+        "company_name",
+        "job_title",
+        "email",
+        "phone",
+        "website",
+    },
 )
 _EMAIL_ADAPTER = TypeAdapter(EmailStr)
 
@@ -120,6 +139,9 @@ Return ONLY a valid JSON object with exactly this shape:
 {
   "core_fields": {
     "name": "string (required)",
+    "first_name": "string or null",
+    "last_name": "string or null",
+    "name_cn": "string or null",
     "company_name": "string or null",
     "job_title": "string or null",
     "email": "string or null",
@@ -134,7 +156,10 @@ Return ONLY a valid JSON object with exactly this shape:
 Rules:
 - Put standard fields in core_fields (including job_title for role/position). Put everything else (fax, address, social handles, etc.) in custom_fields.
 - name must NEVER be null or empty, even if no personal name is printed on the card. If there is no personal name, use the company_name as the name instead. If there is neither a personal name nor a company_name anywhere on the card, use "Unknown" as the name.
-- For the other core_fields (company_name, job_title, email, phone, website), use null for values that are genuinely absent, not empty strings.
+- For the other core_fields (first_name, last_name, name_cn, company_name, job_title, email, phone, website), use null for values that are genuinely absent, not empty strings.
+- name is the personal name exactly as printed, in the printed order. Never reorder it, never merge the English and Chinese names into one string.
+- first_name and last_name split the LATIN name only. last_name is the family name, whichever end of the printed name it sits at: "Wong Ka Ming" and "Li Shan Shan" are family-first, so last_name is "Wong" and "Li"; "Chris Huang" is given-first, so last_name is "Huang". Hong Kong and mainland cards are usually family-first, and a Chinese name printed beside the Latin one is strong evidence of that order. If the card prints only one Latin name, put it in first_name and leave last_name null.
+- name_cn is the Chinese personal name (e.g. 李珊珊), not the Chinese company name and not a Chinese address. Leave it null when the card prints no Chinese personal name.
 - custom_fields values must be strings. Omit empty custom_fields entries.
 - Use snake_case keys in custom_fields. For localized variants of the same field, use `{field}_{lang}` where lang is a short code: en (English), cn (Chinese), ja (Japanese), ko (Korean), fr (French), etc. Examples: address_en, address_cn, alternate_name_cn, fax_en. Do not use human-readable labels like "Address (English)" as keys.
 - When both English and Chinese addresses appear on a card, store them as address_en and address_cn (not address_ch or address_zh).

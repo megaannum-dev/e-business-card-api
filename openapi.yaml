@@ -537,6 +537,19 @@ components:
       properties:
         name:
           type: string
+          description: The name exactly as the card prints it. Clients display this and only this.
+        first_name:
+          type: string
+          nullable: true
+          description: Latin given name, used for sorting and search rather than display.
+        last_name:
+          type: string
+          nullable: true
+          description: Latin family name, whichever end of the printed name it sits at.
+        name_cn:
+          type: string
+          nullable: true
+          description: The Chinese personal name as printed.
         company_name:
           type: string
           nullable: true
@@ -588,6 +601,13 @@ components:
           type: object
           additionalProperties:
             type: string
+        sort_key:
+          type: string
+          description: Lowercase Latin key the client sorts and sections on. Empty files the card under the CJK section.
+        sort_basis:
+          type: string
+          enum: [last_en, first_en, guessed_en, romanized_cn, company, none]
+          description: Which value the sort key came from, so a guess can be shown as one.
         scan_image_url:
           type: string
           nullable: true
@@ -686,6 +706,13 @@ components:
           type: object
           additionalProperties:
             type: string
+        sort_key:
+          type: string
+          description: Lowercase Latin key the client sorts and sections on. Empty files the card under the CJK section.
+        sort_basis:
+          type: string
+          enum: [last_en, first_en, guessed_en, romanized_cn, company, none]
+          description: Which value the sort key came from, so a guess can be shown as one.
         design_id:
           type: string
         design_type:

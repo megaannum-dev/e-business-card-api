@@ -21,6 +21,7 @@ from app.models.card import CapturedCardBase, CapturedCardDocument, CapturedCard
 
 from app.models.requests import CapturedCardUpdate
 from app.services.image_enhancement_service import ImageEnhancementService
+from app.services.name_sort import derive_sort_key
 from app.services.openrouter import OpenRouterService
 from app.services.scan_image_service import ScanImageService
 from app.services.scan_image_review_service import ScanImageReviewService
@@ -1134,6 +1135,16 @@ class CardService:
     @staticmethod
     def _to_response(document: dict) -> CapturedCardResponse:
         card_id = str(document["_id"])
+        # Documents written before the name split have no key stored. Deriving
+        # here means the backfill is an optimisation rather than a correctness
+        # requirement, and an old card still sorts sensibly today.
+        sort_key = document.get("sort_key")
+        sort_basis = document.get("sort_basis")
+        if not sort_key or not sort_basis:
+            sort_key, sort_basis = derive_sort_key(
+                document.get("core_fields"),
+                document.get("custom_fields"),
+            )
         scan_image_front_id = CardService._scan_front_image_id(document)
         scan_image_back_id = CardService._scan_back_image_id(document)
         return CapturedCardResponse(
@@ -1165,4 +1176,6 @@ class CardService:
             enhanced_suggestions=document.get("enhanced_suggestions", {}),
             parse_error=document.get("parse_error"),
             parsed_at=document.get("parsed_at"),
+            sort_key=sort_key,
+            sort_basis=sort_basis,
         )

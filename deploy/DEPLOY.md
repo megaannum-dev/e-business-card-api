@@ -19,10 +19,11 @@ Mobile app production URL: `https://focms.megaannum.ai:8001`
 | `docker-compose.prod.yml` | Prod server — host networking (`ebc.megaannum.ai`; fixes broken Docker DNS) |
 | `start.sh` | Build and start containers (`DEPLOY_ENV` in `.env`, or `--dev` / `--prod`) |
 | `nginx/focms-ebc-8001.conf` | nginx server block: SSL on 8001, per-IP rate limits, security headers |
-| `nginx/conf.d/ebc-ratelimit.conf` | Rate limit zones (http-level -- must go in `/etc/nginx/conf.d/`) |
+| `nginx/conf.d/00-ebc-ratelimit.conf` | Rate limit zones (http-level -- must go in `/etc/nginx/conf.d/`) |
 | `nginx/snippets/ebc-proxy.conf` | Shared `proxy_pass` settings included by every location |
 | `alert_auth_anomalies.sh` | 401/403 and 429 alerting (cron, every 5 min) |
-| `RUNBOOK.md` | Incident triage |
+| `RUNBOOK.md` | Incident triage -- what to do when an alert fires |
+| `VERIFY.md` | Verification commands -- proving the security work still holds |
 | `.env.dev.example` | Template for **dev** server `.env` (`DEPLOY_ENV=dev`) |
 | `.env.production.example` | Template for **prod** server `.env` (`DEPLOY_ENV=prod`) |
 | `setup-server.sh` | One-time Docker/nginx install (skip if CMS server already set up) |

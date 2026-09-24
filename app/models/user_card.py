@@ -2,11 +2,12 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.card import (
     CapturedCardBase,
     CoreFields,
+    NameSortBasis,
     PhotoFace,
     ScanImageEnhancementStatus,
     WalletDisplay,
@@ -70,8 +71,21 @@ class UserCardDocument(UserCardBase):
     scan_image_enhancement_error: str | None = None
     wallet_display: WalletDisplay | None = None
     photo_face: PhotoFace | None = None
+    sort_key: str = ""
+    sort_basis: NameSortBasis = "none"
     created_at: datetime
     updated_at: datetime
+
+    @model_validator(mode="after")
+    def derive_sort_fields(self) -> "UserCardDocument":
+        """Derived on every construction, which includes reading a stored
+        document back, so cards written before the name split still sort."""
+        from app.services.name_sort import derive_sort_key
+
+        key, basis = derive_sort_key(self.core_fields.model_dump(), self.custom_fields)
+        object.__setattr__(self, "sort_key", key)
+        object.__setattr__(self, "sort_basis", basis)
+        return self
 
 
 class UserCardResponse(UserCardDocument):

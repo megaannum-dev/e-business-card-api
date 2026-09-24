@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 WalletDisplay = Literal["photo", "classic"]
 PhotoFace = Literal["front", "back"]
@@ -9,12 +9,29 @@ ParseStatus = Literal["pending", "parsed", "failed", "fallback"]
 ParseSource = Literal["llm", "offline", "manual"]
 EnhancementStatus = Literal["none", "queued", "processing", "pending_review", "applied", "failed"]
 ScanImageEnhancementStatus = Literal["none", "processing", "preview_ready", "applied", "discarded", "failed"]
+NameSortBasis = Literal["last_en", "first_en", "guessed_en", "romanized_cn", "company", "none"]
 
 
 class CoreFields(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    name: str = Field(..., min_length=1, description="Contact full name")
+    name: str = Field(
+        ...,
+        min_length=1,
+        description="The name exactly as the card prints it. Clients display this and only this.",
+    )
+    first_name: str | None = Field(
+        default=None,
+        description="Latin given name. Used for sorting and search, never for display.",
+    )
+    last_name: str | None = Field(
+        default=None,
+        description="Latin family name. Used for sorting and search, never for display.",
+    )
+    name_cn: str | None = Field(
+        default=None,
+        description="The Chinese name as printed, when the card carries one.",
+    )
     company_name: str | None = None
     job_title: str | None = None
     email: EmailStr | None = None
@@ -28,6 +45,14 @@ class CoreFields(BaseModel):
         if not stripped:
             raise ValueError("name must not be empty")
         return stripped
+
+    @field_validator("first_name", "last_name", "name_cn")
+    @classmethod
+    def strip_optional_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
 
 
 class CapturedCardBase(BaseModel):
@@ -73,6 +98,26 @@ class CapturedCardDocument(CapturedCardBase):
     edited_fields: list[str] = Field(default_factory=list)
     parse_error: str | None = None
     parsed_at: datetime | None = None
+    sort_key: str = ""
+    sort_basis: NameSortBasis = "none"
+
+    @model_validator(mode="after")
+    def derive_sort_fields(self) -> "CapturedCardDocument":
+        """Keep the key in step with the name on every write.
+
+        Derived here rather than at each call site: cards are constructed in
+        half a dozen places across parsing, offline drafts and enhancement, and
+        a key that is stale is worse than one that is absent.
+        """
+        from app.services.name_sort import derive_sort_key
+
+        key, basis = derive_sort_key(
+            self.core_fields.model_dump(),
+            self.custom_fields,
+        )
+        object.__setattr__(self, "sort_key", key)
+        object.__setattr__(self, "sort_basis", basis)
+        return self
 
 
 class CapturedCardResponse(CapturedCardBase):
@@ -130,6 +175,14 @@ class CapturedCardResponse(CapturedCardBase):
     parsed_at: datetime | None = Field(
         default=None,
         description="Timestamp of the latest successful parse update.",
+    )
+    sort_key: str = Field(
+        default="",
+        description="Lowercase Latin key the client sorts and sections on. Empty means the card files under the CJK section.",
+    )
+    sort_basis: NameSortBasis = Field(
+        default="none",
+        description="Which value the sort key came from, so a guess can be shown as one.",
     )
 
     model_config = ConfigDict(populate_by_name=True, serialize_by_alias=True)
