@@ -30,6 +30,36 @@ paths:
           description: Authentication service not configured
         "500":
           description: Database query failed
+    post:
+      summary: Save a contact typed in by hand
+      description: >-
+        For contacts entered without a card photo. Unlike an offline draft this
+        is not queued for LLM enhancement, because there is no OCR text and the
+        typed values are the user's own.
+      operationId: createManualCard
+      tags:
+        - cards
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualCardCreate"
+      responses:
+        "201":
+          description: The stored card
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapturedCardResponse"
+        "401":
+          description: Missing or invalid Firebase ID token
+        "422":
+          description: Validation failed
+        "500":
+          description: Database insert failed
   /api/v1/cards/process:
     post:
       summary: Parse OCR text and persist a captured business card
@@ -530,6 +560,17 @@ components:
         raw_ocr_text:
           type: string
           minLength: 1
+    ManualCardCreate:
+      type: object
+      required:
+        - core_fields
+      properties:
+        core_fields:
+          $ref: "#/components/schemas/CoreFields"
+        custom_fields:
+          type: object
+          additionalProperties:
+            type: string
     CoreFields:
       type: object
       required:

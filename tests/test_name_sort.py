@@ -99,3 +99,23 @@ class TestCoreFieldsAcceptsTheSplit:
         fields = CoreFields(name="Chris Huang", first_name="   ", name_cn="")
         assert fields.first_name is None
         assert fields.name_cn is None
+
+
+class TestManualCardState:
+    """A typed-in contact must not be treated as something to enhance."""
+
+    def test_manual_cards_are_parsed_not_queued(self):
+        from app.models.card import CapturedCardDocument
+
+        document = CapturedCardDocument(
+            owner_user_id="user-1",
+            scanned_at=datetime.now(UTC),
+            core_fields=CoreFields(name="Sarah Lam", first_name="Sarah", last_name="Lam"),
+            parse_status="parsed",
+            parse_source="manual",
+            enhancement_status="none",
+        )
+        # Anything else would let the enhancement pass rewrite what the user typed.
+        assert document.enhancement_status == "none"
+        assert document.parse_source == "manual"
+        assert document.sort_key == "lam"

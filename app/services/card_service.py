@@ -150,6 +150,44 @@ class CardService:
             }
         )
 
+    async def create_manual_card(
+        self,
+        owner_user_id: str,
+        core_fields: dict,
+        custom_fields: dict,
+    ) -> CapturedCardResponse:
+        """Save a contact the user typed in, with no card photo behind it.
+
+        Deliberately not an offline draft: a draft is queued for LLM
+        enhancement of its OCR text, and there is no OCR text here — running
+        enhancement would let the model rewrite what the user typed.
+        """
+        now = datetime.now(UTC)
+        document = CapturedCardDocument(
+            owner_user_id=owner_user_id,
+            scanned_at=now,
+            core_fields=core_fields,
+            custom_fields=custom_fields,
+            parse_status="parsed",
+            parse_source="manual",
+            enhancement_status="none",
+            parsed_at=now,
+        )
+
+        try:
+            insert_result = await self._collection.insert_one(document.model_dump(mode="python"))
+        except ValidationError as exc:
+            logger.exception("Manual card failed Pydantic validation before persistence")
+            raise CardPersistenceError("Card document failed validation") from exc
+        except PyMongoError as exc:
+            logger.exception("MongoDB insert failed for manual card")
+            raise CardPersistenceError("Failed to persist manual card") from exc
+
+        stored = await self._collection.find_one({"_id": insert_result.inserted_id})
+        if stored is None:
+            raise CardPersistenceError("Manual card disappeared after insert")
+        return self._to_response(stored)
+
     async def save_offline_draft(
         self,
         owner_user_id: str,
