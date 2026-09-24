@@ -1,15 +1,18 @@
 """Write sort_key and sort_basis onto cards stored before the name split.
 
 Responses derive the key on read, so the app already sorts correctly without
-this. Run it so the values exist in the database — which is what a future
-server-side sort or index would need — and so `sort_basis` records honestly
-which cards are sorting on a guess.
+this. Run it so the values exist in the database — which a future server-side
+sort or index would need — and so `sort_basis` records honestly which cards are
+sorting on a guessed family name.
 
-    python -m scripts.backfill_sort_keys            # report only
-    python -m scripts.backfill_sort_keys --apply    # write
+Needs the API's own interpreter (Python 3.11+ with motor installed), so run it
+in the container rather than with the host's system python:
 
-The guess is never written into first_name or last_name. A name split the user
-never confirmed does not belong in a field they will later see and edit.
+    docker compose exec api python -m scripts.backfill_sort_keys           # report
+    docker compose exec api python -m scripts.backfill_sort_keys --apply   # write
+
+The guess is never written into first_name or last_name. A split the user never
+confirmed does not belong in a field they will later see and edit.
 """
 
 from __future__ import annotations
@@ -18,26 +21,24 @@ import argparse
 import asyncio
 from collections import Counter
 
-from motor.motor_asyncio import AsyncIOMotorClient
-
-from app.core.config import get_settings
+from app.db.mongodb import get_cards_collection, get_user_cards_collection, get_motor_client
 from app.services.name_sort import derive_sort_key
 
-COLLECTIONS = ("cards", "user_cards")
+PROJECTION = {"core_fields": 1, "custom_fields": 1, "sort_key": 1, "sort_basis": 1}
 
 
 async def backfill(apply: bool) -> None:
-    settings = get_settings()
-    client = AsyncIOMotorClient(settings.mongo_uri)
-    database = client[settings.mongo_db_name]
+    collections = (
+        ("captured cards", get_cards_collection()),
+        ("my cards", get_user_cards_collection()),
+    )
 
-    for name in COLLECTIONS:
-        collection = database[name]
+    for label, collection in collections:
         seen = 0
         changed = 0
         bases: Counter[str] = Counter()
 
-        async for document in collection.find({}, {"core_fields": 1, "custom_fields": 1, "sort_key": 1, "sort_basis": 1}):
+        async for document in collection.find({}, PROJECTION):
             seen += 1
             key, basis = derive_sort_key(
                 document.get("core_fields"),
@@ -54,7 +55,7 @@ async def backfill(apply: bool) -> None:
                 )
 
         verb = "updated" if apply else "would update"
-        print(f"{name}: {seen} cards, {verb} {changed}")
+        print(f"{label} ({collection.name}): {seen} cards, {verb} {changed}")
         for basis, count in bases.most_common():
             print(f"  {basis}: {count}")
         if bases.get("guessed_en"):
@@ -63,7 +64,7 @@ async def backfill(apply: bool) -> None:
                 "until they are rescanned or edited",
             )
 
-    client.close()
+    get_motor_client().close()
 
 
 def main() -> None:
