@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from fastapi.responses import Response
 from motor.motor_asyncio import AsyncIOMotorCollection
 
-from app.core.auth import get_current_user_id
+from app.core.auth import get_current_user_id, get_current_user_id_strict
 from app.core.exceptions import (
     CardNotFoundError,
     CardPersistenceError,
@@ -24,6 +24,7 @@ from app.models.card import CapturedCardResponse, PhotoFace
 from app.models.requests import (
     ApplyEnhancementRequest,
     CapturedCardUpdate,
+    ManualCardCreate,
     OCR_TEXT_MAX_LENGTH,
     UpdateWalletDisplayRequest,
 )
@@ -99,6 +100,24 @@ async def import_card_from_share(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to save shared card to your collection.",
         ) from exc
+
+
+@router.post(
+    "",
+    response_model=CapturedCardResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Save a contact typed in by hand",
+)
+async def create_manual_card(
+    payload: ManualCardCreate,
+    owner_user_id: str = Depends(get_current_user_id),
+    card_service: CardService = Depends(get_card_service),
+) -> CapturedCardResponse:
+    return await card_service.create_manual_card(
+        owner_user_id=owner_user_id,
+        core_fields=payload.core_fields.model_dump(),
+        custom_fields=payload.custom_fields,
+    )
 
 
 @router.post(
@@ -459,7 +478,7 @@ async def update_wallet_display(
 )
 async def delete_card(
     card_id: str,
-    owner_user_id: str = Depends(get_current_user_id),
+    owner_user_id: str = Depends(get_current_user_id_strict),
     card_service: CardService = Depends(get_card_service),
 ) -> None:
     try:

@@ -25,11 +25,11 @@ CARD_DESIGN_PRESETS: dict[str, dict[str, str]] = {
         "text": "#F1FAFF",
         "muted": "#A8DADC",
     },
-    "rose": {
-        "background": "#4A1942",
-        "accent": "#FF6B9D",
-        "text": "#FFF0F6",
-        "muted": "#E8B4D0",
+    "sand": {
+        "background": "#D1C6A5",
+        "accent": "#6B5B3E",
+        "text": "#2A2118",
+        "muted": "#4A4236",
     },
     "noir": {
         "background": "#111111",

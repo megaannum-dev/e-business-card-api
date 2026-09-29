@@ -147,6 +147,12 @@ class TestDefaults:
         # "No endpoints found". Model ids get retired; this pins the lesson.
         assert Settings().openrouter_vision_model != "x-ai/grok-2-vision-1212"
 
+    def test_default_vision_model_id_has_no_tilde_prefix(self):
+        # OpenRouter lists floating "latest" pointers as ~vendor/model. That
+        # prefix did not survive .env -> compose -> container and arrived as a
+        # bare id, failing with: "... is not a valid model ID" (HTTP 400).
+        assert not Settings().openrouter_vision_model.startswith("~")
+
     def test_default_vision_model_is_not_a_known_text_only_id(self):
         # Vendor is not the signal -- DeepSeek ships both text-only models and
         # vision ones. Only these specific ids lack image input.

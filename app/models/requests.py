@@ -27,6 +27,15 @@ class CapturedCardUpdate(BaseModel):
     custom_fields: dict[str, str] | None = None
 
 
+class ManualCardCreate(BaseModel):
+    """A contact typed in by hand, with no card photo and no OCR text."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    core_fields: CoreFields
+    custom_fields: dict[str, str] = Field(default_factory=dict)
+
+
 class ApplyEnhancementRequest(BaseModel):
     accept_all: bool = False
     accepted_fields: list[str] = Field(default_factory=list)
