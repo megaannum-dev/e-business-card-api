@@ -21,6 +21,7 @@ from app.models.card import CapturedCardBase, CapturedCardDocument, CapturedCard
 
 from app.models.requests import CapturedCardUpdate
 from app.services.image_enhancement_service import ImageEnhancementService
+from app.services.name_sort import derive_sort_key
 from app.services.openrouter import OpenRouterService
 from app.services.scan_image_service import ScanImageService
 from app.services.scan_image_review_service import ScanImageReviewService
@@ -148,6 +149,44 @@ class CardService:
                 "photo_face": photo_face,
             }
         )
+
+    async def create_manual_card(
+        self,
+        owner_user_id: str,
+        core_fields: dict,
+        custom_fields: dict,
+    ) -> CapturedCardResponse:
+        """Save a contact the user typed in, with no card photo behind it.
+
+        Deliberately not an offline draft: a draft is queued for LLM
+        enhancement of its OCR text, and there is no OCR text here — running
+        enhancement would let the model rewrite what the user typed.
+        """
+        now = datetime.now(UTC)
+        document = CapturedCardDocument(
+            owner_user_id=owner_user_id,
+            scanned_at=now,
+            core_fields=core_fields,
+            custom_fields=custom_fields,
+            parse_status="parsed",
+            parse_source="manual",
+            enhancement_status="none",
+            parsed_at=now,
+        )
+
+        try:
+            insert_result = await self._collection.insert_one(document.model_dump(mode="python"))
+        except ValidationError as exc:
+            logger.exception("Manual card failed Pydantic validation before persistence")
+            raise CardPersistenceError("Card document failed validation") from exc
+        except PyMongoError as exc:
+            logger.exception("MongoDB insert failed for manual card")
+            raise CardPersistenceError("Failed to persist manual card") from exc
+
+        stored = await self._collection.find_one({"_id": insert_result.inserted_id})
+        if stored is None:
+            raise CardPersistenceError("Manual card disappeared after insert")
+        return self._to_response(stored)
 
     async def save_offline_draft(
         self,
@@ -1134,6 +1173,16 @@ class CardService:
     @staticmethod
     def _to_response(document: dict) -> CapturedCardResponse:
         card_id = str(document["_id"])
+        # Documents written before the name split have no key stored. Deriving
+        # here means the backfill is an optimisation rather than a correctness
+        # requirement, and an old card still sorts sensibly today.
+        sort_key = document.get("sort_key")
+        sort_basis = document.get("sort_basis")
+        if not sort_key or not sort_basis:
+            sort_key, sort_basis = derive_sort_key(
+                document.get("core_fields"),
+                document.get("custom_fields"),
+            )
         scan_image_front_id = CardService._scan_front_image_id(document)
         scan_image_back_id = CardService._scan_back_image_id(document)
         return CapturedCardResponse(
@@ -1165,4 +1214,6 @@ class CardService:
             enhanced_suggestions=document.get("enhanced_suggestions", {}),
             parse_error=document.get("parse_error"),
             parsed_at=document.get("parsed_at"),
+            sort_key=sort_key,
+            sort_basis=sort_basis,
         )
